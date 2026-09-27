@@ -1,0 +1,882 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Stocktrack</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#ffffff; --surface:#ffffff; --ink:#15181b; --muted:#5c6570;
+    --line:#15181b; --line-soft:#e1e4e6; --hover:#f2f4f5;
+    --bar-bg:#12202e; --bar-ink:#eef2f5; --bar-muted:#7d92a6;
+    --accent:#dc9d00; --accent-ink:#15181b; --danger:#b3402a; --danger-soft:rgba(179,64,42,.09);
+    --good:#2f7a4f;
+    box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+  }
+  *,*::before,*::after{box-sizing:inherit}
+  @media (prefers-color-scheme:dark){ :root:not([data-theme="light"]){
+    --bg:#0d1116; --surface:#141a20; --ink:#eef1f3; --muted:#93a0ab;
+    --line:#eef1f3; --line-soft:#232b32; --hover:#1b2229;
+    --bar-bg:#070c11; --bar-ink:#eef1f3; --bar-muted:#63737f;
+    --accent:#e3ab19; --danger:#e2604a; --danger-soft:rgba(226,96,74,.12); --good:#4caf7d;
+  }}
+  :root[data-theme="dark"]{
+    --bg:#0d1116; --surface:#141a20; --ink:#eef1f3; --muted:#93a0ab;
+    --line:#eef1f3; --line-soft:#232b32; --hover:#1b2229;
+    --bar-bg:#070c11; --bar-ink:#eef1f3; --bar-muted:#63737f;
+    --accent:#e3ab19; --danger:#e2604a; --danger-soft:rgba(226,96,74,.12); --good:#4caf7d;
+  }
+  html,body{height:100%;margin:0}
+  html{scroll-padding-top:env(safe-area-inset-top,0px)}
+  body{font-family:'Space Grotesk',system-ui,-apple-system,'Segoe UI',sans-serif; background:var(--bg); color:var(--ink); font-weight:500}
+  .mono{font-family:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace}
+  @media (prefers-reduced-motion:reduce){ *{transition:none !important; animation:none !important} }
+  button:focus-visible, input:focus-visible, select:focus-visible{ outline:2px solid var(--accent); outline-offset:2px }
+
+  .app-shell{display:flex; min-height:100%}
+
+  .sidebar{width:222px; flex-shrink:0; background:var(--bar-bg); color:var(--bar-ink); display:flex; flex-direction:column; padding:20px 16px}
+  .brand{display:flex; flex-direction:column; gap:2px; padding-bottom:18px; margin-bottom:6px; border-bottom:1px solid rgba(255,255,255,.1)}
+  .brand-mark{font-size:16px; font-weight:700; letter-spacing:-.01em}
+  .brand-sub{font-size:11.5px; color:var(--bar-muted)}
+  nav{display:flex; flex-direction:column; gap:2px}
+  .nav-btn{all:unset; cursor:pointer; display:flex; align-items:center; gap:10px; font-size:13.5px; color:#b9c3cc; padding:9px 10px; border-left:2px solid transparent}
+  .nav-btn:hover{color:#fff; background:rgba(255,255,255,.05)}
+  .nav-btn.active{color:#fff; font-weight:600; border-left-color:var(--accent); background:rgba(255,255,255,.06)}
+  .nav-icon{display:flex; flex-shrink:0}
+  .sidebar-spacer{flex:1}
+  .theme-btn{all:unset; cursor:pointer; display:flex; align-items:center; justify-content:center; color:var(--bar-muted); padding:9px; border-top:1px solid rgba(255,255,255,.1)}
+  .theme-btn:hover{color:#fff}
+
+  .seg-toggle{display:inline-flex; border:1px solid var(--line); margin-bottom:18px}
+  .seg-btn{all:unset; cursor:pointer; font-size:12.5px; font-weight:600; padding:8px 16px; color:var(--muted); border-right:1px solid var(--line); font-family:'Space Grotesk',sans-serif}
+  .seg-btn:last-child{border-right:none}
+  .seg-btn.active{background:var(--ink); color:var(--bg)}
+  .seg-btn:hover:not(.active){background:var(--hover); color:var(--ink)}
+  .serial-summary-row td{font-weight:500}
+
+  .main{flex:1; min-width:0}
+  header.pagehead{display:flex; align-items:center; justify-content:space-between; gap:16px; padding:22px 30px; border-bottom:1px solid var(--line-soft); flex-wrap:wrap}
+  h1.page-title{font-size:21px; font-weight:700; margin:0; letter-spacing:-.01em}
+  .page-sub{font-size:12.5px; color:var(--muted); margin-top:3px}
+  .actions{display:flex; gap:10px; flex-shrink:0}
+  .btn{all:unset; cursor:pointer; font-size:13px; font-weight:600; padding:9px 16px; display:inline-flex; align-items:center; gap:6px; white-space:nowrap; font-family:'Space Grotesk',sans-serif}
+  .btn-primary{background:var(--accent); color:var(--accent-ink)}
+  .btn-primary:hover{filter:brightness(1.06)}
+  .btn-ghost{border:1px solid var(--line); color:var(--ink)}
+  .btn-ghost:hover{background:var(--hover)}
+  .btn-danger-outline{border:1px solid var(--danger); color:var(--danger)}
+  .btn-danger-outline:hover{background:var(--danger-soft)}
+  .btn[disabled]{opacity:.4; cursor:not-allowed}
+
+  .content{max-width:1120px; margin:0 auto; padding:26px 30px 80px}
+  .view{display:none}
+  .view.active{display:block}
+
+  .readout-panel{display:flex; flex-wrap:wrap; border:1px solid var(--line-soft); margin-bottom:30px;
+    background-image:linear-gradient(var(--line-soft) 1px, transparent 1px), linear-gradient(90deg, var(--line-soft) 1px, transparent 1px);
+    background-size:22px 22px;}
+  .readout-item{flex:1 1 160px; padding:20px 22px; border-left:1px solid var(--line-soft); background:var(--surface)}
+  .readout-item:first-child{border-left:none}
+  .readout-num{font-family:'IBM Plex Mono',monospace; font-size:30px; font-weight:600; line-height:1; color:var(--ink)}
+  .readout-num.accent{color:var(--accent)}
+  .readout-num.danger{color:var(--danger)}
+  .readout-label{font-size:12px; color:var(--muted); margin-top:6px}
+
+  h2.section-title{font-size:13.5px; font-weight:600; margin:0 0 12px}
+  .section-actions{display:flex; justify-content:flex-end; margin-bottom:14px}
+  .toolbar{display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap}
+  .search-input{border:1px solid var(--line); background:var(--surface); color:var(--ink); font-size:13px; padding:8px 12px; font-family:inherit; min-width:240px}
+
+  .table-scroll{overflow-x:auto}
+  table{width:100%; border-collapse:collapse; font-size:13px; min-width:560px}
+  th{text-align:left; font-size:11.5px; font-weight:600; color:var(--muted); padding:9px 10px; border-bottom:1px solid var(--line); white-space:nowrap}
+  td{padding:11px 10px; border-bottom:1px solid var(--line-soft); vertical-align:middle}
+  tr:hover td{background:var(--hover)}
+  .id-cell{display:inline-flex; align-items:center; gap:5px}
+  .badge{display:inline-block; font-size:11px; font-weight:600; padding:3px 8px; border:1px solid var(--line)}
+  .badge-serialised{border-color:var(--accent); color:var(--accent)}
+  .badge-nonserialised{border-color:var(--line); color:var(--ink)}
+  .badge-consumable{border-color:var(--muted); color:var(--muted)}
+  .chip{display:inline-flex; align-items:center; gap:3px; border:1px solid var(--line-soft); padding:2px 6px; font-size:11.5px; margin:2px 4px 2px 0; white-space:nowrap}
+
+  .copy-btn,.btn-scan{all:unset; cursor:pointer; display:inline-flex; align-items:center; color:var(--muted)}
+  .copy-btn{padding:2px}
+  .copy-btn:hover{color:var(--ink)}
+  .copy-btn.copied{color:var(--good)}
+  .btn-scan{border:1px solid var(--line); padding:0 10px; font-size:12px; font-weight:600; gap:5px; color:var(--ink); white-space:nowrap}
+  .btn-scan:hover{background:var(--hover)}
+
+  .storage-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:14px}
+  .storage-card{position:relative; border:1px solid var(--line-soft); padding:16px; cursor:pointer; background:var(--surface)}
+  .storage-card:hover{border-color:var(--line)}
+  .storage-name{font-weight:600; font-size:14.5px; padding-right:18px}
+  .storage-count{font-size:12px; color:var(--muted); margin-top:4px}
+  .storage-del{position:absolute; top:12px; right:12px; color:var(--muted)}
+  .storage-del:hover{color:var(--danger)}
+  .storage-card.dashed{border-style:dashed; display:flex; align-items:center; justify-content:center; color:var(--muted); cursor:pointer; font-size:13px; font-weight:600}
+  .storage-card.dashed:hover{color:var(--accent); border-color:var(--accent)}
+  .back-link{all:unset; cursor:pointer; display:inline-flex; align-items:center; gap:6px; font-size:13px; font-weight:600; color:var(--muted); margin-bottom:18px}
+  .back-link:hover{color:var(--ink)}
+
+  .list-item{border:1px solid var(--line-soft); border-left-width:3px; border-left-color:var(--accent); padding:13px 16px; display:flex; align-items:center; gap:16px; margin-bottom:10px; font-size:13px; flex-wrap:wrap}
+  .li-part{font-family:'IBM Plex Mono',monospace; font-weight:600; min-width:78px}
+  .li-name{color:var(--muted); min-width:130px}
+  .li-status{margin-left:auto; font-size:11.5px; font-weight:600; padding:3px 9px; border:1px solid var(--accent); color:var(--accent)}
+
+  .history-item{display:flex; gap:14px; padding:12px 0; border-bottom:1px solid var(--line-soft); font-size:13px; flex-wrap:wrap; align-items:baseline}
+  .history-time{font-family:'IBM Plex Mono',monospace; color:var(--muted); min-width:118px; font-size:12px}
+  .history-action{font-weight:600; min-width:110px}
+  .history-tag{font-size:11px; border:1px solid var(--line-soft); color:var(--muted); padding:1px 7px}
+  .hint{font-size:12.5px; color:var(--muted)}
+
+  .modal-overlay{position:fixed; inset:0; background:rgba(10,14,18,.55); display:none; align-items:center; justify-content:center; z-index:50; padding:20px}
+  .modal-overlay.open{display:flex}
+  .modal-box{background:var(--bg); border:1px solid var(--line); max-width:440px; width:100%; padding:22px; max-height:90vh; overflow:auto}
+  .modal-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; font-weight:700; font-size:15px}
+  .modal-close{all:unset; cursor:pointer; font-size:20px; line-height:1; color:var(--muted)}
+  .field{margin-bottom:14px}
+  .field label{display:block; font-size:12px; color:var(--muted); margin-bottom:5px}
+  .field input,.field select{width:100%; padding:8px 10px; border:1px solid var(--line); font-size:13px; background:var(--surface); color:var(--ink); font-family:inherit}
+  .input-row{display:flex; gap:8px}
+  .input-row input,.input-row select{flex:1; min-width:0}
+  .field-error{font-size:12px; color:var(--danger); margin-top:5px; min-height:14px}
+  .radio-row{display:flex; gap:14px; flex-wrap:wrap}
+  .radio-row label{display:flex; align-items:center; gap:6px; font-size:13px; color:var(--ink)}
+  .modal-actions{display:flex; justify-content:flex-end; gap:10px; margin-top:4px}
+  .helper-note{font-size:12px; color:var(--muted); margin:-6px 0 14px}
+
+  .scanner-overlay{position:fixed; inset:0; background:rgba(10,14,18,.75); display:none; align-items:center; justify-content:center; z-index:60; padding:20px}
+  .scanner-overlay.open{display:flex}
+  .scanner-box{background:#000; border:1px solid var(--line-soft); max-width:420px; width:100%; padding:14px}
+  .scanner-head{display:flex; justify-content:space-between; align-items:center; color:#fff; font-size:14px; font-weight:600; margin-bottom:10px}
+  .scanner-head .modal-close{color:#cfd6db}
+  #scannerVideo{width:100%; background:#000; display:block; max-height:60vh}
+  .scanner-msg{color:#cfd6db; font-size:12.5px; margin-top:10px; text-align:center}
+
+  .toast{position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(10px); background:var(--ink); color:var(--bg); padding:11px 18px; font-size:13px; font-weight:600; opacity:0; transition:opacity .25s, transform .25s; z-index:100; box-shadow:0 6px 20px rgba(0,0,0,.25); max-width:88vw}
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
+
+  ::-webkit-scrollbar{height:6px; width:6px}
+  ::-webkit-scrollbar-thumb{background:var(--line-soft)}
+
+  @media (max-width:820px){
+    .app-shell{flex-direction:column}
+    .sidebar{width:100%; flex-direction:row; align-items:center; gap:4px; padding:8px 14px; position:sticky; top:env(safe-area-inset-top,0px); z-index:10; overflow-x:auto}
+    .brand{border-bottom:none; padding-bottom:0; margin-bottom:0; flex-shrink:0; margin-right:6px}
+    .brand-sub{display:none}
+    nav{flex-direction:row}
+    .nav-btn{border-left:none; border-bottom:2px solid transparent; padding:10px 9px}
+    .nav-btn.active{border-left:none; border-bottom-color:var(--accent)}
+    .sidebar-spacer{flex:0 0 8px}
+    .theme-btn{border-top:none; flex-shrink:0}
+    header.pagehead{padding:16px}
+    .content{padding:18px 16px 60px}
+  }
+</style>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand"><span class="brand-mark">Stocktrack</span><span class="brand-sub">Parts, storage &amp; RMA</span></div>
+      <nav id="nav">
+        <button class="nav-btn active" data-view="dashboard"><span class="nav-icon"><svg viewBox="0 0 18 18" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="6" height="6"></rect><rect x="10" y="2" width="6" height="6"></rect><rect x="2" y="10" width="6" height="6"></rect><rect x="10" y="10" width="6" height="6"></rect></svg></span><span>Dashboard</span></button>
+        <button class="nav-btn" data-view="parts"><span class="nav-icon"><svg viewBox="0 0 18 18" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M9 2 2 5.5v7L9 16l7-3.5v-7L9 2Z"></path><path d="M2 5.5 9 9l7-3.5M9 9v7"></path></svg></span><span>Parts</span></button>
+        <button class="nav-btn" data-view="storage"><span class="nav-icon"><svg viewBox="0 0 18 18" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="14" height="4"></rect><rect x="2" y="7.5" width="14" height="4"></rect><rect x="2" y="13" width="14" height="3"></rect></svg></span><span>Storage</span></button>
+        <button class="nav-btn" data-view="machines"><span class="nav-icon"><svg viewBox="0 0 18 18" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="14" height="12" rx="1"></rect><circle cx="6" cy="8" r="1.1" fill="currentColor" stroke="none"></circle><circle cx="6" cy="11.5" r="1.1" fill="currentColor" stroke="none"></circle><line x1="9.5" y1="8" x2="13.5" y2="8"></line><line x1="9.5" y1="11.5" x2="13.5" y2="11.5"></line></svg></span><span>Machines</span></button>
+        <button class="nav-btn" data-view="rma"><span class="nav-icon"><svg viewBox="0 0 18 18" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 8a6 6 0 0 1 10.5-3.8M15 8a6 6 0 0 1-10.5 3.8"></path><path d="M13.5 1.8v2.4H11M4.5 16.2v-2.4H7"></path></svg></span><span>RMA</span></button>
+        <button class="nav-btn" data-view="history"><span class="nav-icon"><svg viewBox="0 0 18 18" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="9" cy="9" r="7"></circle><path d="M9 5v4l3 2" stroke-linecap="round"></path></svg></span><span>History</span></button>
+      </nav>
+      <div class="sidebar-spacer"></div>
+      <button class="theme-btn" id="themeToggle" title="Toggle theme" aria-label="Toggle theme"><svg viewBox="0 0 18 18" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="9" cy="9" r="6.5"></circle><path d="M9 2.5A6.5 6.5 0 0 1 9 15.5Z" fill="currentColor" stroke="none"></path></svg></button>
+    </aside>
+
+    <div class="main">
+      <header class="pagehead">
+        <div><h1 class="page-title" id="pageTitle">Dashboard</h1><div class="page-sub" id="pageSub">Overview of parts, stock and open items</div></div>
+        <div class="actions">
+          <button class="btn btn-ghost" onclick="exportCSV()">Export backup</button>
+          <button class="btn btn-primary" id="headerAddPart" style="display:none" onclick="openModal('part')">+ Add part</button>
+        </div>
+      </header>
+
+      <div class="content">
+        <section class="view active" id="view-dashboard">
+          <div class="toolbar" style="margin-bottom:22px">
+            <input class="search-input" id="globalSearch" placeholder="Search parts, serials, storages, machines, orders…" oninput="renderGlobalSearch()" style="flex:1;min-width:0">
+          </div>
+          <div id="globalSearchResults" style="display:none"></div>
+          <div id="dashboardDefault">
+            <div class="readout-panel">
+              <div class="readout-item"><div class="readout-num" id="statParts">0</div><div class="readout-label">Parts defined</div></div>
+              <div class="readout-item"><div class="readout-num" id="statStock">0</div><div class="readout-label">Units in stock</div></div>
+              <div class="readout-item"><div class="readout-num" id="statWaiting">0</div><div class="readout-label">Waiting arrival</div></div>
+              <div class="readout-item"><div class="readout-num" id="statRma">0</div><div class="readout-label">Open RMAs</div></div>
+            </div>
+            <h2 class="section-title">Recent activity</h2>
+            <div id="dashHistory"></div>
+          </div>
+        </section>
+
+        <section class="view" id="view-parts">
+          <div class="table-scroll"><table><thead><tr><th>Part number</th><th>Name</th><th>Type</th><th>Total stock</th><th></th></tr></thead><tbody id="partsBody"></tbody></table></div>
+        </section>
+
+        <section class="view" id="view-storage">
+          <div id="storageContent"></div>
+        </section>
+
+        <section class="view" id="view-machines">
+          <div class="section-actions"><button class="btn btn-primary" onclick="openModal('machine')">+ Add machine</button></div>
+          <div class="table-scroll"><table><thead><tr><th>Machine</th><th>Parts installed</th><th></th></tr></thead><tbody id="machinesBody"></tbody></table></div>
+        </section>
+
+        <section class="view" id="view-rma">
+          <div class="section-actions"><button class="btn btn-primary" onclick="openModal('rma')">+ New RMA</button></div>
+          <div class="table-scroll"><table><thead><tr><th>Order / ticket</th><th>Part</th><th>Affected S/N</th><th>New S/N</th><th>Machine</th><th>Status</th></tr></thead><tbody id="rmaBody"></tbody></table></div>
+        </section>
+
+        <section class="view" id="view-history">
+          <div class="toolbar"><h2 class="section-title" style="margin:0">Full audit trail</h2><input class="search-input" id="historySearch" placeholder="Filter by part, machine, order, action…" oninput="renderHistory()"></div>
+          <div class="table-scroll"><table><thead><tr><th>Date &amp; time</th><th>Order / ticket</th><th>Machine</th><th>Name</th><th>Part number</th><th>SN</th><th>Storage</th><th>Detail</th><th>Action</th></tr></thead><tbody id="historyBody"></tbody></table></div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal-box">
+      <div class="modal-head"><span id="modalTitle"></span><button class="modal-close" type="button" onclick="closeModal()">&times;</button></div>
+      <form id="modalForm">
+        <div id="modalBody"></div>
+        <div class="modal-actions"><button type="button" class="btn btn-ghost" onclick="closeModal()">Cancel</button><button type="submit" class="btn btn-primary" id="modalSubmitBtn">Save</button></div>
+      </form>
+    </div>
+  </div>
+
+  <div class="scanner-overlay" id="scannerOverlay">
+    <div class="scanner-box">
+      <div class="scanner-head"><span>Scan barcode</span><button class="modal-close" type="button" onclick="closeScanner()">&times;</button></div>
+      <video id="scannerVideo" playsinline muted></video>
+      <p class="scanner-msg" id="scannerMsg">Starting camera…</p>
+    </div>
+  </div>
+
+<script>
+/* ---------- icons ---------- */
+const ICON_COPY='<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="5.5" y="5.5" width="8" height="8"></rect><path d="M3 10.5V3a1 1 0 0 1 1-1h7.5"></path></svg>';
+const ICON_CHECK='<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 8.5l3 3 7-7"></path></svg>';
+const ICON_SCAN='<svg viewBox="0 0 18 18" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 6V3.5A1.5 1.5 0 0 1 3.5 2H6M12 2h2.5A1.5 1.5 0 0 1 16 3.5V6M16 12v2.5a1.5 1.5 0 0 1-1.5 1.5H12M6 16H3.5A1.5 1.5 0 0 1 2 14.5V12"></path><line x1="3" y1="9" x2="15" y2="9"></line></svg>';
+const ICON_TRASH='<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M2.5 4.5h11M6 4.5V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5M4 4.5l.6 8.4a1 1 0 0 0 1 .9h4.8a1 1 0 0 0 1-.9l.6-8.4"></path></svg>';
+const ICON_BACK='<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3 5 8l5 5"></path></svg>';
+
+/* ---------- db ---------- */
+const DB_NAME='stocktracker', DB_VER=2;
+let db, currentModalType=null, currentStorageView=null;
+let storageDetailMode='serial', serialExpand={};
+
+function openDB(){
+  return new Promise((res,rej)=>{
+    const r=indexedDB.open(DB_NAME,DB_VER);
+    r.onupgradeneeded=e=>{
+      const d=e.target.result;
+      if(!d.objectStoreNames.contains('parts')) d.createObjectStore('parts',{keyPath:'pn'});
+      if(!d.objectStoreNames.contains('storages')) d.createObjectStore('storages',{keyPath:'name'});
+      if(!d.objectStoreNames.contains('stock')) d.createObjectStore('stock',{keyPath:['pn','storage']});
+      if(!d.objectStoreNames.contains('serials')) d.createObjectStore('serials',{keyPath:'sn'});
+      if(!d.objectStoreNames.contains('incoming')) d.createObjectStore('incoming',{keyPath:'id',autoIncrement:true});
+      if(!d.objectStoreNames.contains('rma')) d.createObjectStore('rma',{keyPath:'id',autoIncrement:true});
+      if(!d.objectStoreNames.contains('history')) d.createObjectStore('history',{keyPath:'id',autoIncrement:true});
+      if(!d.objectStoreNames.contains('machines')) d.createObjectStore('machines',{keyPath:'name'});
+    };
+    r.onsuccess=e=>res(e.target.result);
+    r.onerror=e=>rej(e.target.error);
+  });
+}
+function tx(store,mode='readonly'){ return db.transaction(store,mode).objectStore(store); }
+function reqp(req){ return new Promise((res,rej)=>{ req.onsuccess=()=>res(req.result); req.onerror=()=>rej(req.error); }); }
+function getAll(store){ return reqp(tx(store).getAll()); }
+function getOne(store,key){ return reqp(tx(store).get(key)); }
+function put(store,val){ return reqp(tx(store,'readwrite').put(val)); }
+function addRec(store,val){ return reqp(tx(store,'readwrite').add(val)); }
+function del(store,key){ return reqp(tx(store,'readwrite').delete(key)); }
+function addHistory(f){ return addRec('history',{pn:f.pn||'—', name:f.name||'', sn:f.sn||'', action:f.action||'', detail:f.detail||'', machine:f.machine||'', storage:f.storage||'', order:f.order||'', date:now()}); }
+function now(){ const d=new Date(); return d.toLocaleDateString('en-GB')+' '+d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}); }
+function labelType(t){ return {serialised:'Serialised',nonserialised:'Non-serialised',consumable:'Consumable'}[t]; }
+function emptyRow(colspan,text){ return '<tr><td colspan="'+colspan+'" class="hint" style="padding:16px 10px">'+esc(text)+'</td></tr>'; }
+function esc(s){ return (s===null||s===undefined?'':String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+function jsSafe(s){ return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+function copyBtn(text){ return '<button type="button" class="copy-btn" onclick="copyText(event,this,\''+jsSafe(text)+'\')" title="Copy">'+ICON_COPY+'</button>'; }
+function scanBtn(targetId){ return '<button type="button" class="btn-scan" onclick="openScanner(\''+targetId+'\')" title="Scan barcode">'+ICON_SCAN+'<span>Scan</span></button>'; }
+
+function partStockTotal(pn,part,stock,serials){
+  if(part.type==='serialised') return serials.filter(s=>s.pn===pn&&s.status==='in_stock').length;
+  return stock.filter(s=>s.pn===pn).reduce((a,s)=>a+s.qty,0);
+}
+
+/* ---------- copy to clipboard ---------- */
+function copyText(e, btn, text){
+  e.stopPropagation();
+  const finish=()=>{
+    const original=btn.innerHTML;
+    btn.innerHTML=ICON_CHECK;
+    btn.classList.add('copied');
+    setTimeout(()=>{ btn.innerHTML=original; btn.classList.remove('copied'); },1100);
+  };
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(finish).catch(()=>fallbackCopy(text,finish));
+  } else fallbackCopy(text,finish);
+}
+function fallbackCopy(text,done){
+  const ta=document.createElement('textarea');
+  ta.value=text; ta.style.position='fixed'; ta.style.opacity='0';
+  document.body.appendChild(ta); ta.select();
+  try{ document.execCommand('copy'); done(); }catch(e){}
+  document.body.removeChild(ta);
+}
+
+/* ---------- toast ---------- */
+function toast(msg){
+  const t=document.createElement('div');
+  t.className='toast';
+  t.textContent=msg;
+  document.body.appendChild(t);
+  requestAnimationFrame(()=>t.classList.add('show'));
+  setTimeout(()=>{ t.classList.remove('show'); setTimeout(()=>t.remove(),300); },2800);
+}
+
+/* ---------- barcode scanner ---------- */
+let zxReader=null, scannerTarget=null;
+async function openScanner(targetId){
+  scannerTarget=targetId;
+  document.getElementById('scannerOverlay').classList.add('open');
+  const msg=document.getElementById('scannerMsg');
+  const video=document.getElementById('scannerVideo');
+  msg.textContent='Starting camera…';
+  if(typeof ZXing==='undefined'){
+    msg.textContent='The scanner library did not load — type the value in instead.';
+    return;
+  }
+  try{
+    zxReader=new ZXing.BrowserMultiFormatReader();
+    const devices=await zxReader.listVideoInputDevices();
+    if(!devices.length) throw new Error('no camera found on this device');
+    const rear=devices.find(d=>/back|rear|environment/i.test(d.label));
+    const deviceId=rear?rear.deviceId:devices[devices.length-1].deviceId;
+    msg.textContent='Point the camera at a barcode.';
+    zxReader.decodeFromVideoDevice(deviceId, video, (result)=>{
+      if(result) applyScanResult(result.getText());
+    });
+  }catch(err){
+    msg.textContent='Camera unavailable ('+(err&&err.message?err.message:'permission denied')+'). Type the value in instead.';
+  }
+}
+function closeScanner(){
+  document.getElementById('scannerOverlay').classList.remove('open');
+  if(zxReader){ try{ zxReader.reset(); }catch(e){} zxReader=null; }
+}
+function applyScanResult(text){
+  const el=document.getElementById(scannerTarget);
+  if(!el){ closeScanner(); return; }
+  if(el.tagName==='SELECT'){
+    const opt=Array.from(el.options).find(o=>o.value.toLowerCase()===text.toLowerCase());
+    if(opt){ el.value=opt.value; el.dispatchEvent(new Event('change')); closeScanner(); }
+    else{ document.getElementById('scannerMsg').textContent='No item in stock matches "'+text+'". Try again or type it in.'; }
+  } else {
+    el.value=text;
+    el.dispatchEvent(new Event('input'));
+    el.dispatchEvent(new Event('blur'));
+    closeScanner();
+  }
+}
+
+/* ---------- render ---------- */
+async function renderAll(){
+  await Promise.all([renderDashboard(),renderParts(),renderStorageView(),renderRMA(),renderHistory(),renderMachines()]);
+}
+function historyLine(h){
+  let tags='';
+  if(h.order) tags+='<span class="history-tag">Order '+esc(h.order)+'</span> ';
+  if(h.machine) tags+='<span class="history-tag">Machine: '+esc(h.machine)+'</span> ';
+  if(h.storage) tags+='<span class="history-tag">Storage: '+esc(h.storage)+'</span> ';
+  if(h.sn) tags+='<span class="history-tag">SN: '+esc(h.sn)+'</span>';
+  return '<div class="history-item"><span class="history-time">'+esc(h.date)+'</span>'+(tags?('<span>'+tags+'</span>'):'')+'<span class="mono" style="min-width:78px;font-weight:600">'+esc(h.pn)+'</span><span style="min-width:110px;color:var(--muted)">'+esc(h.name||'')+'</span><span style="flex:1;min-width:160px">'+esc(h.detail)+'</span><span class="history-action">'+esc(h.action)+'</span></div>';
+}
+async function renderDashboard(){
+  const [parts,stock,serials,incoming,rma,history]=await Promise.all([getAll('parts'),getAll('stock'),getAll('serials'),getAll('incoming'),getAll('rma'),getAll('history')]);
+  document.getElementById('statParts').textContent=parts.length;
+  document.getElementById('statStock').textContent=stock.reduce((a,s)=>a+s.qty,0)+serials.filter(s=>s.status==='in_stock').length;
+  const waiting=incoming.filter(i=>i.status==='Waiting').length;
+  const openRma=rma.filter(r=>r.status!=='Closed').length;
+  document.getElementById('statWaiting').textContent=waiting;
+  document.getElementById('statWaiting').className='readout-num'+(waiting>0?' accent':'');
+  document.getElementById('statRma').textContent=openRma;
+  document.getElementById('statRma').className='readout-num'+(openRma>0?' danger':'');
+  const recent=history.slice(-6).reverse();
+  document.getElementById('dashHistory').innerHTML = recent.map(historyLine).join('') || '<p class="hint">No activity yet. Actions you take will show up here.</p>';
+  await renderGlobalSearch();
+}
+
+/* ---- global search ---- */
+function searchResultRow(groupLabel, idx, title, sub){
+  return '<div class="list-item" style="cursor:pointer;border-left-color:var(--line)" data-group="'+esc(groupLabel)+'" data-idx="'+idx+'"><span class="li-name" style="font-weight:600;color:var(--ink);min-width:180px">'+esc(title)+'</span><span class="li-name">'+esc(sub)+'</span></div>';
+}
+async function renderGlobalSearch(){
+  const q=(document.getElementById('globalSearch').value||'').trim().toLowerCase();
+  const resultsEl=document.getElementById('globalSearchResults');
+  const defaultEl=document.getElementById('dashboardDefault');
+  if(!q){ resultsEl.style.display='none'; resultsEl.innerHTML=''; defaultEl.style.display='block'; return; }
+  defaultEl.style.display='none'; resultsEl.style.display='block';
+  const [parts,serials,storages,machines,incoming,rma,history]=await Promise.all([getAll('parts'),getAll('serials'),getAll('storages'),getAll('machines'),getAll('incoming'),getAll('rma'),getAll('history')]);
+  const groups=[];
+  const partMatches=parts.filter(p=>p.pn.toLowerCase().includes(q)||p.name.toLowerCase().includes(q));
+  if(partMatches.length) groups.push({label:'Parts',items:partMatches.map(p=>({title:p.pn+' — '+p.name,sub:labelType(p.type),action:()=>switchView('parts')}))});
+  const serialMatches=serials.filter(s=>s.sn.toLowerCase().includes(q));
+  if(serialMatches.length) groups.push({label:'Serial numbers',items:serialMatches.map(s=>({title:s.sn,sub:s.pn+' · '+(s.status==='in_stock'?('in stock @ '+s.storage):(s.status==='used'?('used @ '+s.machine):'RMA')),action:()=>{switchView('storage');if(s.storage)openStorageDetail(s.storage);}}))});
+  const storageMatches=storages.filter(s=>s.name.toLowerCase().includes(q));
+  if(storageMatches.length) groups.push({label:'Storages',items:storageMatches.map(s=>({title:s.name,sub:'Storage location',action:()=>{switchView('storage');openStorageDetail(s.name);}}))});
+  const machineMatches=machines.filter(m=>m.name.toLowerCase().includes(q));
+  if(machineMatches.length) groups.push({label:'Machines',items:machineMatches.map(m=>({title:m.name,sub:'Machine',action:()=>switchView('machines')}))});
+  const incomingMatches=incoming.filter(i=>i.status==='Waiting'&&((i.pn||'').toLowerCase().includes(q)||(i.order||'').toLowerCase().includes(q)));
+  if(incomingMatches.length) groups.push({label:'Incoming',items:incomingMatches.map(i=>({title:i.pn+' — Order '+i.order,sub:i.status+' → '+i.storage,action:()=>switchView('storage')}))});
+  const rmaMatches=rma.filter(r=>[r.order,r.old,r.new,r.pn].join(' ').toLowerCase().includes(q));
+  if(rmaMatches.length) groups.push({label:'RMA',items:rmaMatches.map(r=>({title:r.old+' → '+r.new,sub:'Order '+r.order,action:()=>switchView('rma')}))});
+  const historyMatches=history.filter(h=>[h.action,h.pn,h.name,h.sn,h.detail,h.machine,h.storage,h.order].join(' ').toLowerCase().includes(q)).slice(-30).reverse();
+  if(historyMatches.length) groups.push({label:'History',items:historyMatches.map(h=>({title:h.action+' — '+h.pn,sub:h.detail,action:()=>switchView('history')}))});
+
+  window.__searchGroups=groups;
+  resultsEl.innerHTML = groups.length ? groups.map(g=>
+    '<h2 class="section-title">'+esc(g.label)+'</h2>'+g.items.slice(0,8).map((it,idx)=>searchResultRow(g.label,idx,it.title,it.sub)).join('')
+  ).join('') : '<p class="hint">No matches for "'+esc(q)+'".</p>';
+  resultsEl.querySelectorAll('.list-item').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const g=window.__searchGroups.find(x=>x.label===el.dataset.group);
+      const it=g && g.items[+el.dataset.idx];
+      if(it) it.action();
+    });
+  });
+}
+
+async function renderMachines(){
+  const [machines,serials]=await Promise.all([getAll('machines'),getAll('serials')]);
+  document.getElementById('machinesBody').innerHTML = machines.map(m=>{
+    const count=serials.filter(s=>s.status==='used'&&s.machine===m.name).length;
+    return '<tr><td style="font-weight:600">'+esc(m.name)+'</td><td class="mono">'+count+'</td><td><button type="button" class="copy-btn" title="Delete machine" onclick="deleteMachine(event,\''+jsSafe(m.name)+'\')">'+ICON_TRASH+'</button></td></tr>';
+  }).join('') || emptyRow(3,'No machines yet. Add one to start assigning parts.');
+}
+async function deleteMachine(e,name){
+  e.stopPropagation();
+  if(!confirm('Delete machine "'+name+'"? Existing history entries will keep the name.')) return;
+  await del('machines',name);
+  await addHistory({action:'Machine deleted', pn:'—', detail:'"'+name+'" removed', machine:name});
+  await renderAll();
+  toast('Machine "'+name+'" deleted');
+}
+
+async function renderParts(){
+  const [parts,stock,serials]=await Promise.all([getAll('parts'),getAll('stock'),getAll('serials')]);
+  document.getElementById('headerAddPart').style.display = document.querySelector('.nav-btn.active') && document.querySelector('.nav-btn.active').dataset.view==='parts' ? 'inline-flex' : 'none';
+  document.getElementById('partsBody').innerHTML = parts.map(p=>{
+    const total=partStockTotal(p.pn,p,stock,serials);
+    return '<tr><td><span class="id-cell mono">'+esc(p.pn)+copyBtn(p.pn)+'</span></td><td>'+esc(p.name)+'</td><td><span class="badge badge-'+p.type+'">'+labelType(p.type)+'</span></td><td class="mono">'+total+'</td><td><button class="btn btn-ghost" style="padding:5px 10px;font-size:12px" onclick="openModal(\'use\',{pn:\''+jsSafe(p.pn)+'\'})">Use</button></td></tr>';
+  }).join('') || emptyRow(5,'No parts yet. Add one to start tracking stock.');
+}
+
+/* ---- storage (merged with stock) ---- */
+async function renderStorageView(){
+  if(currentStorageView===null) await renderStorageGrid();
+  else await renderStorageDetail(currentStorageView);
+}
+async function renderStorageGrid(){
+  const [storages,stock,serials]=await Promise.all([getAll('storages'),getAll('stock'),getAll('serials')]);
+  const cards=storages.map(s=>{
+    const distinct=new Set([...stock.filter(x=>x.storage===s.name&&x.qty>0).map(x=>x.pn), ...serials.filter(x=>x.storage===s.name&&x.status==='in_stock').map(x=>x.pn)]);
+    return '<div class="storage-card" onclick="openStorageDetail(\''+jsSafe(s.name)+'\')">'
+      +'<button type="button" class="storage-del" title="Delete storage" onclick="deleteStorage(event,\''+jsSafe(s.name)+'\')">'+ICON_TRASH+'</button>'
+      +'<div class="storage-name">'+esc(s.name)+'</div><div class="storage-count">'+distinct.size+' different part'+(distinct.size===1?'':'s')+'</div></div>';
+  }).join('');
+  const addCard='<div class="storage-card dashed" onclick="openModal(\'storage\')">+ Add storage</div>';
+  document.getElementById('storageContent').innerHTML = '<div class="storage-grid">'+cards+addCard+'</div>'
+    +'<h2 class="section-title" style="margin-top:32px">Incoming</h2>'
+    +'<div class="section-actions"><button class="btn btn-primary" onclick="openModal(\'receive\')">+ Log incoming part</button></div>'
+    +'<div id="incomingList"></div>';
+  await renderIncoming();
+}
+async function renderStorageDetail(name){
+  const [parts,stock,serials]=await Promise.all([getAll('parts'),getAll('stock'),getAll('serials')]);
+  const serialParts=parts.filter(p=>p.type==='serialised');
+  const otherParts=parts.filter(p=>p.type!=='serialised');
+
+  const serialRows=serialParts.map(p=>{
+    const list=serials.filter(s=>s.pn===p.pn&&s.storage===name&&s.status==='in_stock');
+    if(!list.length) return '';
+    const shown=serialExpand[p.pn]||0;
+    const visible=list.slice(0,shown);
+    let out='<tr class="serial-summary-row" style="cursor:pointer" onclick="toggleSerialExpand(\''+jsSafe(p.pn)+'\')">'
+      +'<td><span class="id-cell mono">'+esc(p.pn)+copyBtn(p.pn)+'</span></td>'
+      +'<td>'+esc(p.name)+'</td>'
+      +'<td class="mono" style="font-weight:600">'+list.length+'</td>'
+      +'<td><button type="button" class="btn btn-ghost" style="padding:5px 10px;font-size:12px" onclick="event.stopPropagation();openModal(\'use\',{pn:\''+jsSafe(p.pn)+'\',storage:\''+jsSafe(name)+'\'})">Use</button></td></tr>';
+    if(shown>0){
+      out+='<tr><td colspan="4" style="padding:10px 10px 14px;background:var(--hover)">'
+        +visible.map(s=>'<span class="chip mono">'+esc(s.sn)+copyBtn(s.sn)+'</span>').join('')
+        +(list.length>visible.length ? '<div style="margin-top:8px"><button type="button" class="btn btn-ghost" style="padding:5px 10px;font-size:12px" onclick="event.stopPropagation();loadMoreSerials(\''+jsSafe(p.pn)+'\')">Show 10 more ('+(list.length-visible.length)+' left)</button></div>' : '')
+        +'</td></tr>';
+    }
+    return out;
+  }).filter(Boolean).join('');
+
+  const otherRows=otherParts.map(p=>{
+    const rec=stock.find(s=>s.pn===p.pn&&s.storage===name);
+    const qty=rec?rec.qty:0;
+    if(!qty) return '';
+    return '<tr><td><span class="id-cell mono">'+esc(p.pn)+copyBtn(p.pn)+'</span></td><td>'+esc(p.name)+'</td><td><span class="badge badge-'+p.type+'">'+labelType(p.type)+'</span></td><td class="mono" style="font-weight:600">'+qty+'</td><td><button type="button" class="btn btn-ghost" style="padding:5px 10px;font-size:12px" onclick="openModal(\'use\',{pn:\''+jsSafe(p.pn)+'\',storage:\''+jsSafe(name)+'\'})">Use</button></td></tr>';
+  }).filter(Boolean).join('');
+
+  document.getElementById('pageTitle').textContent='Storage — '+name;
+  document.getElementById('pageSub').textContent='Parts currently held at this location';
+
+  const toggleHTML='<div class="seg-toggle">'
+    +'<button type="button" class="seg-btn'+(storageDetailMode==='serial'?' active':'')+'" onclick="setStorageDetailMode(\'serial\')">Serialised</button>'
+    +'<button type="button" class="seg-btn'+(storageDetailMode==='other'?' active':'')+'" onclick="setStorageDetailMode(\'other\')">Consumable &amp; non-serialised</button>'
+    +'</div>';
+  const serialTable='<div class="table-scroll"><table><thead><tr><th>Part number</th><th>Name</th><th>Quantity</th><th></th></tr></thead><tbody>'+(serialRows||emptyRow(4,'No serialised units held here.'))+'</tbody></table></div><p class="hint" style="margin-top:8px">Click a row to show its serial numbers.</p>';
+  const otherTable='<div class="table-scroll"><table><thead><tr><th>Part number</th><th>Name</th><th>Type</th><th>Quantity</th><th></th></tr></thead><tbody>'+(otherRows||emptyRow(5,'Nothing held here right now.'))+'</tbody></table></div>';
+
+  document.getElementById('storageContent').innerHTML =
+    '<button type="button" class="back-link" onclick="openStorageDetail(null)">'+ICON_BACK+'<span>All storages</span></button>'
+    +toggleHTML
+    +(storageDetailMode==='serial'?serialTable:otherTable);
+}
+async function openStorageDetail(name){
+  currentStorageView=name;
+  serialExpand={};
+  storageDetailMode='serial';
+  await renderStorageView();
+}
+function setStorageDetailMode(mode){ storageDetailMode=mode; renderStorageDetail(currentStorageView); }
+function toggleSerialExpand(pn){ serialExpand[pn]=serialExpand[pn]?0:10; renderStorageDetail(currentStorageView); }
+function loadMoreSerials(pn){ serialExpand[pn]=(serialExpand[pn]||0)+10; renderStorageDetail(currentStorageView); }
+async function deleteStorage(e,name){
+  e.stopPropagation();
+  const [stock,serials]=await Promise.all([getAll('stock'),getAll('serials')]);
+  const hasStock = stock.some(s=>s.storage===name&&s.qty>0) || serials.some(s=>s.storage===name&&s.status==='in_stock');
+  if(hasStock){ alert('"'+name+'" still holds stock. Move or use it all before deleting this storage.'); return; }
+  if(!confirm('Delete storage "'+name+'"? This can\'t be undone.')) return;
+  await del('storages',name);
+  const zeroRows=stock.filter(s=>s.storage===name);
+  for(const r of zeroRows) await del('stock',[r.pn,r.storage]);
+  await addHistory({action:'Storage deleted', pn:'—', detail:'"'+name+'" removed', storage:name});
+  if(currentStorageView===name) currentStorageView=null;
+  await renderAll();
+  toast('Storage "'+name+'" deleted');
+}
+
+async function renderIncoming(){
+  const [allIncoming,parts]=await Promise.all([getAll('incoming'),getAll('parts')]);
+  const incoming=allIncoming.filter(i=>i.status==='Waiting');
+  const nameFor=pn=>{ const p=parts.find(x=>x.pn===pn); return p?p.name:''; };
+  const el=document.getElementById('incomingList');
+  if(!el) return;
+  el.innerHTML = incoming.map(i=>
+    '<div class="list-item"><span class="li-part">'+esc(i.pn)+'</span><span class="li-name">'+esc(nameFor(i.pn))+'</span><span class="li-name">Order '+esc(i.order)+copyBtn(i.order)+'</span><span>'+(i.sn?('SN '+esc(i.sn)+copyBtn(i.sn)):('Qty '+i.qty))+' &rarr; '+esc(i.storage)+'</span><span class="li-status">Waiting arrival</span><button class="btn btn-ghost" style="padding:5px 10px;font-size:12px" onclick="markArrived('+i.id+')">Mark arrived</button></div>'
+  ).join('') || '<p class="hint">Nothing incoming right now. Log a part on order to track it.</p>';
+}
+async function renderRMA(){
+  const rma=(await getAll('rma')).reverse();
+  document.getElementById('rmaBody').innerHTML = rma.map(r=>'<tr><td><span class="id-cell mono">'+esc(r.order)+copyBtn(r.order)+'</span></td><td class="mono">'+esc(r.pn)+'</td><td><span class="id-cell mono">'+esc(r.old)+copyBtn(r.old)+'</span></td><td><span class="id-cell mono">'+esc(r.new)+copyBtn(r.new)+'</span></td><td>'+esc(r.machine||'—')+'</td><td>'+esc(r.status)+'</td></tr>').join('') || emptyRow(6,'No RMAs logged yet.');
+}
+async function renderHistory(){
+  const q=(document.getElementById('historySearch').value||'').trim().toLowerCase();
+  let history=(await getAll('history')).reverse();
+  const hadAny=history.length>0;
+  if(q) history=history.filter(h=>[h.action,h.pn,h.name,h.sn,h.detail,h.machine,h.storage,h.order].join(' ').toLowerCase().includes(q));
+  document.getElementById('historyBody').innerHTML = history.map(h=>
+    '<tr><td class="mono">'+esc(h.date)+'</td>'
+    +'<td>'+(h.order?('<span class="id-cell mono">'+esc(h.order)+copyBtn(h.order)+'</span>'):'—')+'</td>'
+    +'<td>'+esc(h.machine||'—')+'</td>'
+    +'<td>'+esc(h.name||'—')+'</td>'
+    +'<td class="mono">'+esc(h.pn)+'</td>'
+    +'<td>'+(h.sn?('<span class="id-cell mono">'+esc(h.sn)+copyBtn(h.sn)+'</span>'):'—')+'</td>'
+    +'<td>'+esc(h.storage||'—')+'</td>'
+    +'<td>'+esc(h.detail)+'</td>'
+    +'<td>'+esc(h.action)+'</td></tr>'
+  ).join('') || emptyRow(9, hadAny ? 'No activity matches that search.' : 'No activity yet.');
+}
+
+/* ---------- incoming workflow ---------- */
+async function markArrived(id){
+  const rec=await getOne('incoming',id);
+  rec.status='Arrived';
+  await put('incoming',rec);
+  await commitReceive(rec);
+  const part=await getOne('parts',rec.pn);
+  await addHistory({action:'Arrived', pn:rec.pn, name:part?part.name:'', sn:rec.sn||'', detail:(rec.sn?('Serial '+rec.sn):('Qty '+rec.qty))+' arrived at '+rec.storage, storage:rec.storage, order:rec.order});
+  await renderAll();
+  toast('Marked arrived: '+rec.pn+' at '+rec.storage);
+}
+async function commitReceive(rec){
+  if(rec.sn){ await put('serials',{sn:rec.sn,pn:rec.pn,storage:rec.storage,status:'in_stock',machine:''}); }
+  else { const s=await getOne('stock',[rec.pn,rec.storage]); await put('stock',{pn:rec.pn,storage:rec.storage,qty:(s?s.qty:0)+rec.qty}); }
+}
+
+/* ---------- modal field helpers ---------- */
+function machineSelectHTML(id,machines){
+  return '<div class="field"><label>Machine</label><select id="'+id+'" required>'+machines.map(m=>'<option value="'+esc(m.name)+'">'+esc(m.name)+'</option>').join('')+'</select></div>';
+}
+function focusFirstField(){
+  requestAnimationFrame(()=>{
+    let el=document.querySelector('#modalBody input:not([type=radio]):not([type=checkbox]), #modalBody select');
+    if(!el) el=document.querySelector('#modalBody input[type=radio]');
+    if(el) el.focus();
+  });
+}
+
+/* ---------- modal open/close ---------- */
+async function openModal(type,prefill={}){
+  currentModalType=type;
+  const titles={part:'Add part',storage:'Add storage',receive:'Log incoming part',use:'Use part',rma:'New RMA',machine:'Add machine'};
+  const submitLabels={part:'Add part',storage:'Add storage',receive:'Log incoming part',use:'Log usage',rma:'Save RMA',machine:'Add machine'};
+  document.getElementById('modalTitle').textContent=titles[type];
+  document.getElementById('modalSubmitBtn').textContent=submitLabels[type];
+  const body=document.getElementById('modalBody');
+
+  if(type==='machine'){
+    body.innerHTML='<div class="field"><label>Machine name</label><input id="f_name" required></div>';
+  } else if(type==='part'){
+    body.innerHTML='<div class="field"><label>Type</label><div class="radio-row"><label><input type="radio" name="ptype" value="consumable"> Consumable</label><label><input type="radio" name="ptype" value="nonserialised" checked> Non-serialised</label><label><input type="radio" name="ptype" value="serialised"> Serialised</label></div></div>'
+      +'<div class="field"><label>Part number</label><div class="input-row"><input id="f_pn" required>'+scanBtn('f_pn')+'</div></div>'
+      +'<div class="field"><label>Name</label><input id="f_name" required></div>';
+  } else if(type==='storage'){
+    body.innerHTML='<div class="field"><label>Storage name</label><input id="f_name" required></div>';
+  } else if(type==='receive'){
+    const [parts,storages]=await Promise.all([getAll('parts'),getAll('storages')]);
+    if(!parts.length){ body.innerHTML='<p class="hint">Add a part first before logging something incoming.</p>'; document.getElementById('modalOverlay').classList.add('open'); return; }
+    body.innerHTML='<div class="field"><label>Part</label><select id="f_pn" onchange="onReceivePartChange()">'+parts.map(p=>'<option value="'+esc(p.pn)+'" data-type="'+p.type+'">'+esc(p.pn)+' — '+esc(p.name)+'</option>').join('')+'</select></div>'
+      +'<div class="field"><label>Order / ticket</label><input id="f_order" required></div>'
+      +'<div class="field"><label>Storage</label><select id="f_storage">'+storages.map(s=>'<option>'+esc(s.name)+'</option>').join('')+'</select></div>'
+      +'<div class="field" id="f_qtyWrap"><label>Quantity</label><input id="f_qty" type="number" min="1" value="1"></div>'
+      +'<div class="field" id="f_snWrap" style="display:none"><label>Serial number</label><div class="input-row"><input id="f_sn">'+scanBtn('f_sn')+'</div></div>'
+      +'<div class="field"><label>Status</label><select id="f_status"><option value="Waiting">Waiting arrival</option><option value="Arrived">Arrived</option></select></div>';
+    if(!storages.length){ body.innerHTML='<p class="hint">Add a storage first before logging something incoming.</p>'; document.getElementById('modalOverlay').classList.add('open'); return; }
+    await onReceivePartChange();
+  } else if(type==='use'){
+    const [parts,storages,machines]=await Promise.all([getAll('parts'),getAll('storages'),getAll('machines')]);
+    if(!parts.length){ body.innerHTML='<p class="hint">Add a part first before logging usage.</p>'; document.getElementById('modalOverlay').classList.add('open'); return; }
+    if(!machines.length){ body.innerHTML='<p class="hint">Add a machine first (Machines page) before logging usage.</p>'; document.getElementById('modalOverlay').classList.add('open'); return; }
+    body.innerHTML='<div class="field"><label>Part</label><select id="f_pn" onchange="onUsePartChange()">'+parts.map(p=>'<option value="'+esc(p.pn)+'" data-type="'+p.type+'">'+esc(p.pn)+' — '+esc(p.name)+'</option>').join('')+'</select></div>'
+      +'<div class="field" id="f_storageWrap"><label>Storage</label><select id="f_storage">'+storages.map(s=>'<option>'+esc(s.name)+'</option>').join('')+'</select></div>'
+      +'<div class="field" id="f_qtyWrap"><label>Quantity</label><input id="f_qty" type="number" min="1" value="1"></div>'
+      +'<div class="field" id="f_snWrap" style="display:none"><label>Serial number</label><div class="input-row"><select id="f_sn"></select>'+scanBtn('f_sn')+'</div></div>'
+      +machineSelectHTML('f_machine',machines)
+      +'<div class="field"><label>Order / ticket (optional)</label><input id="f_order"></div>';
+    if(prefill.pn) document.getElementById('f_pn').value=prefill.pn;
+    await onUsePartChange();
+    if(prefill.storage && document.getElementById('f_storageWrap').style.display!=='none') document.getElementById('f_storage').value=prefill.storage;
+  } else if(type==='rma'){
+    const [allParts,machines]=await Promise.all([getAll('parts'),getAll('machines')]);
+    const parts=allParts.filter(p=>p.type==='serialised');
+    if(!parts.length){ body.innerHTML='<p class="hint">RMAs apply to serialised parts. Add a serialised part first.</p>'; document.getElementById('modalOverlay').classList.add('open'); return; }
+    if(!machines.length){ body.innerHTML='<p class="hint">Add a machine first (Machines page) before logging an RMA.</p>'; document.getElementById('modalOverlay').classList.add('open'); return; }
+    body.innerHTML='<div class="field"><label>Part</label><select id="f_pn">'+parts.map(p=>'<option value="'+esc(p.pn)+'">'+esc(p.pn)+' — '+esc(p.name)+'</option>').join('')+'</select></div>'
+      +machineSelectHTML('f_machine',machines)
+      +'<div class="field"><label>Affected serial number</label><div class="input-row"><input id="f_old" required oninput="clearOldErr()" onblur="checkOldSerial()">'+scanBtn('f_old')+'</div><div class="field-error" id="f_old_err"></div></div>'
+      +'<div class="field"><label>Replacement serial number</label><div class="input-row"><input id="f_new" required>'+scanBtn('f_new')+'</div></div>'
+      +'<div class="field"><label>Order / ticket</label><input id="f_order" required></div>';
+  }
+  document.getElementById('modalOverlay').classList.add('open');
+  focusFirstField();
+}
+function closeModal(){
+  document.getElementById('modalOverlay').classList.remove('open');
+  document.getElementById('modalForm').reset();
+}
+
+async function onReceivePartChange(){
+  const sel=document.getElementById('f_pn');
+  const t=sel.selectedOptions[0] ? sel.selectedOptions[0].dataset.type : 'nonserialised';
+  document.getElementById('f_qtyWrap').style.display = t==='serialised' ? 'none':'block';
+  document.getElementById('f_snWrap').style.display = t==='serialised' ? 'block':'none';
+}
+async function onUsePartChange(){
+  const sel=document.getElementById('f_pn');
+  const t=sel.selectedOptions[0] ? sel.selectedOptions[0].dataset.type : 'nonserialised';
+  document.getElementById('f_storageWrap').style.display = t==='serialised' ? 'none':'block';
+  document.getElementById('f_qtyWrap').style.display = t==='serialised' ? 'none':'block';
+  document.getElementById('f_snWrap').style.display = t==='serialised' ? 'block':'none';
+  if(t==='serialised'){
+    const serials=(await getAll('serials')).filter(s=>s.pn===sel.value&&s.status==='in_stock');
+    document.getElementById('f_sn').innerHTML = serials.map(s=>'<option value="'+esc(s.sn)+'">'+esc(s.sn)+' — '+esc(s.storage)+'</option>').join('') || '<option value="">No units in stock</option>';
+  }
+}
+async function checkOldSerial(){
+  const val=document.getElementById('f_old').value.trim();
+  const err=document.getElementById('f_old_err');
+  if(!val){ err.textContent=''; return; }
+  const exists=(await getAll('rma')).some(r=>r.old.toLowerCase()===val.toLowerCase());
+  err.textContent = exists ? 'This serial number has already been logged in an RMA.' : '';
+}
+function clearOldErr(){ const err=document.getElementById('f_old_err'); if(err) err.textContent=''; }
+
+/* ---------- form submit ---------- */
+document.getElementById('modalForm').addEventListener('submit', async e=>{
+  e.preventDefault();
+  try{
+    let msg='';
+    if(currentModalType==='part') msg=await savePart();
+    else if(currentModalType==='storage') msg=await saveStorage();
+    else if(currentModalType==='machine') msg=await saveMachine();
+    else if(currentModalType==='receive') msg=await saveReceive();
+    else if(currentModalType==='use') msg=await saveUse();
+    else if(currentModalType==='rma') msg=await saveRMA();
+    closeModal();
+    await renderAll();
+    if(msg) toast(msg);
+  }catch(err){ alert(err.message); }
+});
+
+async function savePart(){
+  const type=document.querySelector('input[name=ptype]:checked').value;
+  const pn=document.getElementById('f_pn').value.trim();
+  const name=document.getElementById('f_name').value.trim();
+  if(!pn||!name) throw new Error('Part number and name are required.');
+  if(await getOne('parts',pn)) throw new Error('A part with this number already exists.');
+  await put('parts',{pn,name,type});
+  await addHistory({action:'Part added', pn, name, detail:labelType(type)+' part created'});
+  return 'Added part '+pn;
+}
+async function saveMachine(){
+  const name=document.getElementById('f_name').value.trim();
+  if(!name) throw new Error('Machine name is required.');
+  if(await getOne('machines',name)) throw new Error('A machine with this name already exists.');
+  await put('machines',{name});
+  await addHistory({action:'Machine added', pn:'—', detail:'"'+name+'" created', machine:name});
+  return 'Added machine "'+name+'"';
+}
+async function saveStorage(){
+  const name=document.getElementById('f_name').value.trim();
+  if(!name) throw new Error('Storage name is required.');
+  if(await getOne('storages',name)) throw new Error('A storage with this name already exists.');
+  await put('storages',{name});
+  await addHistory({action:'Storage added', pn:'—', detail:'"'+name+'" created', storage:name});
+  return 'Added storage "'+name+'"';
+}
+async function saveReceive(){
+  const pn=document.getElementById('f_pn').value;
+  const order=document.getElementById('f_order').value.trim();
+  const storage=document.getElementById('f_storage').value;
+  const status=document.getElementById('f_status').value;
+  if(!order) throw new Error('Order / ticket is required.');
+  const part=await getOne('parts',pn);
+  let qty=null, sn=null;
+  if(part.type==='serialised'){ sn=document.getElementById('f_sn').value.trim(); if(!sn) throw new Error('Serial number is required.'); }
+  else { qty=parseInt(document.getElementById('f_qty').value,10); if(!qty||qty<1) throw new Error('Enter a valid quantity.'); }
+  const rec={pn,order,storage,status,qty,sn,date:now()};
+  await addRec('incoming',rec);
+  if(status==='Arrived') await commitReceive(rec);
+  await addHistory({action:status==='Arrived'?'Received':'Incoming logged', pn, name:part.name, sn:sn||'', detail:(sn?('Serial '+sn):('Qty '+qty))+' → '+storage, storage, order});
+  return (status==='Arrived'?'Received: ':'Logged incoming: ')+(sn||('qty '+qty))+' of '+pn+' → '+storage;
+}
+async function saveUse(){
+  const pn=document.getElementById('f_pn').value;
+  const machine=document.getElementById('f_machine').value.trim();
+  const order=document.getElementById('f_order').value.trim();
+  if(!machine) throw new Error('Machine is required — which machine is this part going into?');
+  const part=await getOne('parts',pn);
+  if(part.type==='serialised'){
+    const sn=document.getElementById('f_sn').value;
+    if(!sn) throw new Error('Choose a serial number.');
+    const serial=await getOne('serials',sn);
+    serial.status='used'; serial.machine=machine;
+    await put('serials',serial);
+    await addHistory({action:'Used', pn, name:part.name, sn, detail:'Serial '+sn+' installed', machine, storage:serial.storage, order});
+    return 'Logged: serial '+sn+' → '+machine;
+  } else {
+    const storage=document.getElementById('f_storage').value;
+    const qty=parseInt(document.getElementById('f_qty').value,10);
+    const s=await getOne('stock',[pn,storage]);
+    const avail=s?s.qty:0;
+    if(!qty||qty<1||qty>avail) throw new Error('Not enough stock at '+storage+' (available: '+avail+').');
+    await put('stock',{pn,storage,qty:avail-qty});
+    await addHistory({action:'Used', pn, name:part.name, detail:qty+' used from '+storage, machine, storage, order});
+    return 'Logged: '+qty+' × '+pn+' → '+machine;
+  }
+}
+async function saveRMA(){
+  const pn=document.getElementById('f_pn').value;
+  const machine=document.getElementById('f_machine').value.trim();
+  const old=document.getElementById('f_old').value.trim();
+  const nw=document.getElementById('f_new').value.trim();
+  const order=document.getElementById('f_order').value.trim();
+  if(!machine||!old||!nw||!order) throw new Error('All RMA fields are required.');
+  if((await getAll('rma')).some(r=>r.old.toLowerCase()===old.toLowerCase())) throw new Error('This serial number has already been logged in an RMA.');
+  const part=await getOne('parts',pn);
+  const oldSerial=await getOne('serials',old);
+  const storage=oldSerial?oldSerial.storage:'';
+  if(oldSerial){ oldSerial.status='rma'; await put('serials',oldSerial); }
+  await put('serials',{sn:nw,pn,storage,status:'in_stock',machine:''});
+  await addRec('rma',{pn,order,old,new:nw,status:'Replaced',date:now(),machine});
+  await addHistory({action:'RMA replaced', pn, name:part?part.name:'', sn:old, detail:'Serial '+old+' → '+nw, machine, storage, order});
+  return 'RMA saved: '+old+' → '+nw+' on '+machine;
+}
+
+/* ---------- export ---------- */
+function csvEscape(v){ v=(v===null||v===undefined?'':v).toString(); return /[",\n]/.test(v) ? '"'+v.replace(/"/g,'""')+'"' : v; }
+async function exportCSV(){
+  const [parts,storages,stock,serials,incoming,rma,history,machines]=await Promise.all([getAll('parts'),getAll('storages'),getAll('stock'),getAll('serials'),getAll('incoming'),getAll('rma'),getAll('history'),getAll('machines')]);
+  const cols=['record_type','pn','name','type','storage','qty','sn','machine','status','order','old','new','date','action','detail'];
+  const rows=[cols.join(',')];
+  const push=o=>rows.push(cols.map(c=>csvEscape(o[c])).join(','));
+  parts.forEach(p=>push({record_type:'PART',pn:p.pn,name:p.name,type:p.type}));
+  storages.forEach(s=>push({record_type:'STORAGE',name:s.name}));
+  machines.forEach(m=>push({record_type:'MACHINE',name:m.name}));
+  stock.forEach(s=>push({record_type:'STOCK',pn:s.pn,storage:s.storage,qty:s.qty}));
+  serials.forEach(s=>push({record_type:'SERIAL',pn:s.pn,storage:s.storage,sn:s.sn,status:s.status,machine:s.machine}));
+  incoming.forEach(i=>push({record_type:'INCOMING',pn:i.pn,storage:i.storage,order:i.order,qty:i.qty,sn:i.sn,status:i.status,date:i.date}));
+  rma.forEach(r=>push({record_type:'RMA',pn:r.pn,order:r.order,old:r.old,new:r.new,machine:r.machine,status:r.status,date:r.date}));
+  history.forEach(h=>push({record_type:'HISTORY',pn:h.pn,name:h.name,sn:h.sn,date:h.date,action:h.action,detail:h.detail,machine:h.machine,storage:h.storage,order:h.order}));
+  const blob=new Blob([rows.join('\n')],{type:'text/csv'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='stock-backup.csv'; document.body.appendChild(a); a.click(); a.remove();
+}
+
+/* ---------- nav ---------- */
+const titles={
+  dashboard:['Dashboard','Overview of parts, stock and open items'],
+  parts:['Parts','Catalog of every part definition'],
+  storage:['Storage','Where every part physically lives'],
+  machines:['Machines','Equipment that parts get installed into'],
+  rma:['RMA','Serialised replacements and affected units'],
+  history:['History','Complete audit trail of every stock change']
+};
+function switchView(view){
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('active', b.dataset.view===view));
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.getElementById('view-'+view).classList.add('active');
+  if(view==='storage'){ currentStorageView=null; serialExpand={}; storageDetailMode='serial'; renderStorageGrid(); }
+  document.getElementById('pageTitle').textContent=titles[view][0];
+  document.getElementById('pageSub').textContent=titles[view][1];
+  document.getElementById('headerAddPart').style.display = view==='parts' ? 'inline-flex' : 'none';
+}
+document.getElementById('nav').addEventListener('click', e=>{
+  const btn=e.target.closest('.nav-btn');
+  if(!btn) return;
+  switchView(btn.dataset.view);
+});
+document.getElementById('themeToggle').addEventListener('click', ()=>{
+  const r=document.documentElement;
+  r.setAttribute('data-theme', r.getAttribute('data-theme')==='dark' ? 'light' : 'dark');
+});
+document.getElementById('modalOverlay').addEventListener('click', e=>{ if(e.target.id==='modalOverlay') closeModal(); });
+document.getElementById('scannerOverlay').addEventListener('click', e=>{ if(e.target.id==='scannerOverlay') closeScanner(); });
+
+(async()=>{
+  db=await openDB();
+  await renderAll();
+})();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
+</body>
+</html>
