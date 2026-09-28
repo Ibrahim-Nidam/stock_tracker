@@ -487,6 +487,9 @@ function diffText(rows){
 function copyBtn(text){ return '<button type="button" class="copy-btn" data-act="copy" data-text="'+esc(text)+'" title="Copy">'+ICON_COPY+'</button>'; }
 function scanBtn(targetId){ return '<button type="button" class="btn-scan" data-act="scan" data-target="'+targetId+'" title="Scan barcode">'+ICON_SCAN+'<span>Scan</span></button>'; }
 function iconBtn(act,data,icon,title,danger){ return '<button type="button" class="icon-btn'+(danger?' danger':'')+'" data-act="'+act+'" '+da(data)+' title="'+title+'" aria-label="'+title+'">'+icon+'</button>'; }
+function isUsableInStockSerial(s){
+  return !!s && s.status==='in_stock' && !s.doa && !s.rma;
+}
 function partStockTotal(pn,part,stock,serials){
   if(part.type==='serialised') return serials.filter(s=>s.pn===pn&&s.status==='in_stock').length;
   return stock.filter(s=>s.pn===pn).reduce((a,s)=>a+s.qty,0);
@@ -523,7 +526,7 @@ let hlNames=new Set(), hlTimer;
 async function goPart(pn){
   const [stock,serials,parts]=await Promise.all([getAll('stock'),getAll('serials'),getAll('parts')]);
   const p=parts.find(x=>x.pn===pn); if(!p) return;
-  const names=[...new Set([...stock.filter(x=>x.pn===pn&&x.qty>0).map(x=>x.storage),...serials.filter(x=>x.pn===pn&&x.status==='in_stock'&&x.storage).map(x=>x.storage)])];
+  const names=[...new Set([...stock.filter(x=>x.pn===pn&&x.qty>0).map(x=>x.storage),...serials.filter(x=>x.pn===pn&&isUsableInStockSerial(x)&&x.storage).map(x=>x.storage)])];
   if(!names.length){ toast(pn+' isn’t in any storage right now.','info'); return; }
   if(names.length===1){ switchView('storage',{keep:true}); return openStorageDetail(names[0],{pn,mode:p.type==='serialised'?'serial':'other'}); }
   hlNames=new Set(names); clearTimeout(hlTimer);
@@ -968,6 +971,7 @@ async function renderStorageDetail(name){
     const shown=serialExpand[p.pn]||0;
     const open=shown>0;
     const visible=list.slice(0,shown);
+    const usableBtn=(s)=>s.doa||s.rma?'<button type="button" class="btn btn-ghost btn-sm" disabled title="DOA or RMA serials can’t be used">Unavailable</button>':'<button type="button" class="btn btn-ghost btn-sm" data-act="useSerial" '+da({pn:p.pn,sn:s.sn})+'>Use</button>';
     let out='<tr class="serial-summary-row'+(open?' open':'')+'" data-act="toggleSerial" '+da({pn:p.pn})+'>'
       +'<td><span class="id-cell mono"><span class="chev">'+ICON_CHEV+'</span>'+esc(p.pn)+copyBtn(p.pn)+'</span></td>'
       +'<td>'+esc(p.name)+'</td>'
@@ -983,7 +987,7 @@ async function renderStorageDetail(name){
             +'<td>'+(order?('<span class="id-cell mono">'+esc(order)+copyBtn(order)+'</span>'):'<span class="hint">—</span>')+'</td>'
             +'<td class="nowrap">'+(esc(rec)||'<span class="hint">—</span>')+'</td>'
             +'<td>'+(s.note?esc(s.note):'<span class="hint">—</span>')+'</td>'
-            +'<td class="actions-cell"><div class="row-actions"><button type="button" class="btn btn-ghost btn-sm" data-act="useSerial" '+da({pn:p.pn,sn:s.sn})+'>Use</button>'
+            +'<td class="actions-cell"><div class="row-actions">'+usableBtn(s)
             +'<button type="button" class="btn btn-ghost btn-sm" data-act="moveSerial" '+da({sn:s.sn})+'>Move</button>'
             +'<button type="button" class="btn btn-ghost btn-sm" data-act="toggleDoa" '+da({sn:s.sn})+'>'+(s.doa?'Clear DOA':'DOA')+'</button>'+iconBtn('snHistory',{sn:s.sn},ICON_HIST,'See history of this serial')+iconBtn('editSerial',{sn:s.sn},ICON_EDIT,'Edit serial')+iconBtn('delSerial',{sn:s.sn},ICON_TRASH,'Remove serial',true)+'</div></td></tr>';
         }).join('')
@@ -1362,8 +1366,8 @@ async function onUsePartChange(){
   $('f_qtyWrap').style.display=t==='serialised'?'none':'block';
   $('f_snWrap').style.display=t==='serialised'?'block':'none';
   if(t==='serialised'){
-    const serials=(await getAll('serials')).filter(s=>s.pn===sel.value&&s.status==='in_stock');
-    $('f_sn').innerHTML=serials.map(s=>'<option value="'+esc(s.sn)+'">'+esc(s.sn)+' — '+esc(s.storage)+'</option>').join('')||'<option value="">No units in stock</option>';
+    const serials=(await getAll('serials')).filter(s=>s.pn===sel.value&&isUsableInStockSerial(s));
+    $('f_sn').innerHTML=serials.map(s=>'<option value="'+esc(s.sn)+'">'+esc(s.sn)+' — '+esc(s.storage)+'</option>').join('')||'<option value="">No usable units in stock</option>';
   }
 }
 async function checkOldSerial(){
@@ -1550,6 +1554,7 @@ async function saveUse(){
     const declared=await rmaDeclared(sn); if(declared) throw new Error(rmaDeniedMsg(sn,declared));
     const serial=await getOne('serials',sn);
     if(!serial||serial.status!=='in_stock') throw new Error('That serial number isn’t in stock.');
+    if(serial.doa) throw new Error('Serial “'+sn+'” is tagged DOA and can’t be used.');
     serial.status='used'; serial.machine=machine; serial.usedDate=now(); pendingRma={pn,machine,old:sn};
     await put('serials',serial);
     await addHistory({action:'Used',pn,name:part.name,sn,detail:'Serial '+sn+' installed',machine,storage:serial.storage,order});
