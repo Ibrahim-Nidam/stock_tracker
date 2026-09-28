@@ -13,7 +13,7 @@
     --line:#15181b; --line-soft:#e1e4e6; --hover:#f2f4f5;
     --bar-bg:#12202e; --bar-ink:#eef2f5; --bar-muted:#7d92a6;
     --accent:#dc9d00; --accent-ink:#15181b; --danger:#b3402a; --danger-soft:rgba(179,64,42,.09);
-    --good:#2f7a4f; --info:#2f6fb3; --rma:#7b5cc4;
+    --good:#2f7a4f; --info:#2f6fb3; --rma:#7b5cc4; --doa:#d6336c;
     box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
   }
   *,*::before,*::after{box-sizing:inherit}
@@ -21,13 +21,13 @@
     --bg:#0d1116; --surface:#141a20; --ink:#eef1f3; --muted:#93a0ab;
     --line:#eef1f3; --line-soft:#232b32; --hover:#1b2229;
     --bar-bg:#070c11; --bar-ink:#eef1f3; --bar-muted:#63737f;
-    --accent:#e3ab19; --danger:#e2604a; --danger-soft:rgba(226,96,74,.12); --good:#4caf7d; --info:#5b9be0; --rma:#a78bea;
+    --accent:#e3ab19; --danger:#e2604a; --danger-soft:rgba(226,96,74,.12); --good:#4caf7d; --info:#5b9be0; --rma:#a78bea; --doa:#f06595;
   }}
   :root[data-theme="dark"]{
     --bg:#0d1116; --surface:#141a20; --ink:#eef1f3; --muted:#93a0ab;
     --line:#eef1f3; --line-soft:#232b32; --hover:#1b2229;
     --bar-bg:#070c11; --bar-ink:#eef1f3; --bar-muted:#63737f;
-    --accent:#e3ab19; --danger:#e2604a; --danger-soft:rgba(226,96,74,.12); --good:#4caf7d; --info:#5b9be0; --rma:#a78bea;
+    --accent:#e3ab19; --danger:#e2604a; --danger-soft:rgba(226,96,74,.12); --good:#4caf7d; --info:#5b9be0; --rma:#a78bea; --doa:#f06595;
   }
   html,body{height:100%;margin:0}
   html{scroll-padding-top:env(safe-area-inset-top,0px)}
@@ -207,6 +207,17 @@
   .hist-footer{text-align:center; padding:16px 0 0; margin:0}
   .hint{font-size:12.5px; color:var(--muted)}
 
+  .tag{display:inline-block;font-size:10.5px;font-weight:700;padding:1px 6px;margin-left:6px;border:1px solid;letter-spacing:.04em;vertical-align:1px}
+  .tag-doa{color:var(--doa);border-color:var(--doa);background:color-mix(in srgb,var(--doa) 14%,transparent)}
+  .tag-rma{color:var(--rma);border-color:var(--rma);background:color-mix(in srgb,var(--rma) 14%,transparent)}
+  .readout-num.doa{color:var(--doa)}
+  .act-doa::before{background:var(--doa)}
+  .clickrow{cursor:pointer}
+  .storage-card.hl{border-color:var(--info);box-shadow:0 0 0 2px var(--info)}
+  .mdetail{display:grid;gap:16px}
+  .mdetail h3{font-size:12px;font-weight:600;color:var(--muted);margin:0 0 6px}
+  .kv{display:flex;gap:26px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+  .kv b{display:block;font-size:14px;color:var(--ink);margin-top:2px}
   /* modals */
   .modal-overlay{position:fixed; inset:0; background:rgba(10,14,18,.55); display:none; align-items:center; justify-content:center; z-index:50; padding:20px}
   .modal-overlay.open{display:flex}
@@ -325,6 +336,7 @@
               <div class="readout-item"><div class="readout-num" id="statStock">0</div><div class="readout-label">Units in stock</div></div>
               <div class="readout-item"><div class="readout-num" id="statWaiting">0</div><div class="readout-label">Waiting arrival</div></div>
               <div class="readout-item"><div class="readout-num" id="statRma">0</div><div class="readout-label">Open RMAs</div></div>
+              <div class="readout-item"><div class="readout-num" id="statDoa">0</div><div class="readout-label">DOA units</div></div>
             </div>
             <div class="toolbar" style="margin-bottom:10px"><h2 class="section-title" style="margin:0">History</h2><span class="hint">Latest 10 entries</span></div>
             <div class="table-scroll"><table class="history-table"><thead></thead><tbody id="dashHistoryBody"></tbody></table></div>
@@ -333,6 +345,8 @@
         </section>
 
         <section class="view" id="view-parts">
+          <div class="toolbar"><input class="search-input" id="partsSearch" placeholder="Search part number or name…" oninput="renderParts()"></div>
+          <div class="filter-row" id="partsChips"></div>
           <div class="table-scroll"><table><thead><tr><th>Part number</th><th>Name</th><th>Type</th><th>Total stock</th><th></th></tr></thead><tbody id="partsBody"></tbody></table></div>
         </section>
 
@@ -347,7 +361,7 @@
 
         <section class="view" id="view-rma">
           <div class="section-actions"><button class="btn btn-primary" type="button" onclick="openModal('rma')">+ New RMA</button></div>
-          <div class="table-scroll"><table><thead><tr><th>Order / ticket</th><th>Part</th><th>Affected S/N</th><th>New S/N</th><th>Machine</th><th>Status</th></tr></thead><tbody id="rmaBody"></tbody></table></div>
+          <div class="table-scroll"><table><thead><tr><th>Date &amp; time</th><th>Order / ticket</th><th>Part</th><th>Affected S/N</th><th>New S/N</th><th>Machine</th><th>Status</th><th></th></tr></thead><tbody id="rmaBody"></tbody></table></div>
         </section>
 
         <section class="view" id="view-history">
@@ -412,7 +426,7 @@ const DB_NAME='stocktracker', DB_VER=3;
 const ALL='__all__', NONE='__none__';
 let db, modalType=null, modalCtx={}, currentStorageView=null;
 let storageDetailMode='serial', serialExpand={}, selectedGroup=ALL, machineExpand={};
-let confirmResolve=null;
+let confirmResolve=null, pendingRma=null;
 const $=id=>document.getElementById(id);
 
 /* ---------- db ---------- */
@@ -492,6 +506,60 @@ async function snTaken(sn,exceptIncomingId){
   if(await getOne('serials',sn)) return true;
   return (await getAll('incoming')).some(i=>i.status==='Waiting'&&i.sn===sn&&i.id!==exceptIncomingId);
 }
+
+function tagsHTML(s){ return (s.doa?'<span class="tag tag-doa">DOA</span>':'')+(s.rma?'<span class="tag tag-rma">RMA</span>':''); }
+let hlNames=new Set(), hlTimer;
+async function goPart(pn){
+  const [stock,serials,parts]=await Promise.all([getAll('stock'),getAll('serials'),getAll('parts')]);
+  const p=parts.find(x=>x.pn===pn); if(!p) return;
+  const names=[...new Set([...stock.filter(x=>x.pn===pn&&x.qty>0).map(x=>x.storage),...serials.filter(x=>x.pn===pn&&x.status==='in_stock'&&x.storage).map(x=>x.storage)])];
+  if(!names.length){ toast(pn+' isn’t in any storage right now.','info'); return; }
+  if(names.length===1){ switchView('storage',{keep:true}); return openStorageDetail(names[0],{pn,mode:p.type==='serialised'?'serial':'other'}); }
+  hlNames=new Set(names); clearTimeout(hlTimer);
+  hlTimer=setTimeout(()=>{ hlNames=new Set(); document.querySelectorAll('.storage-card.hl').forEach(e=>e.classList.remove('hl')); },5000);
+  switchView('storage');
+}
+async function toggleDoa(sn){
+  const s=await getOne('serials',sn); if(!s) return;
+  const on=!s.doa, part=await getOne('parts',s.pn);
+  await put('serials',Object.assign({},s,{doa:on}));
+  await addHistory({action:on?'DOA tagged':'DOA cleared',pn:s.pn,name:part?part.name:'',sn,detail:on?'Serial '+sn+' tagged as dead on arrival':'DOA tag removed from '+sn,storage:s.storage,machine:s.machine});
+  await renderAll();
+  toast(on?sn+' tagged as DOA':'DOA tag removed from '+sn);
+}
+function machineDetail(m,inst,g,parts,rma,hist){
+  const nm={}; parts.forEach(p=>{ nm[p.pn]=p.name; });
+  const mr=rma.filter(r=>r.machine===m.name).reverse(), mh=hist.filter(h=>h.machine===m.name).slice(-5).reverse();
+  const kv=(k,v)=>'<div>'+k+'<b>'+v+'</b></div>';
+  const tbl=(h,rows,empty)=>rows.length?'<div class="table-scroll"><table class="sub-table"><thead><tr>'+h+'</tr></thead><tbody>'+rows.join('')+'</tbody></table></div>':'<span class="hint">'+empty+'</span>';
+  const inDate=s=>s.usedDate||(hist.filter(h=>h.sn===s.sn&&/^used/i.test(h.action)).pop()||{}).date||'—';
+  return '<div class="mdetail"><div class="kv">'+kv('Group',esc(g||'No group'))+kv('Installed parts',inst.length)+kv('RMAs',mr.length)+kv('DOA units',inst.filter(s=>s.doa).length)+kv('Last activity',esc(mh.length?mh[0].date:'—'))+'</div>'
+   +'<div><h3>Installed parts</h3>'+tbl('<th>Part number</th><th>Name</th><th>Serial number</th><th>Installed</th><th>Received order</th>',inst.map(s=>'<tr><td class="mono">'+esc(s.pn)+'</td><td>'+esc(nm[s.pn]||'—')+'</td><td><span class="id-cell mono">'+esc(s.sn)+copyBtn(s.sn)+'</span>'+tagsHTML(s)+'</td><td class="nowrap">'+esc(inDate(s))+'</td><td class="mono">'+esc(s.order||'—')+'</td></tr>'),'No serialised parts installed in this machine yet.')+'</div>'
+   +'<div><h3>RMAs on this machine</h3>'+tbl('<th>Date</th><th>Order / ticket</th><th>Affected → replacement</th><th>Status</th>',mr.map(r=>'<tr><td class="mono nowrap">'+esc(r.date||'—')+'</td><td class="mono">'+esc(r.order||'—')+'</td><td class="mono">'+esc(r.old)+' → '+esc(r.new)+'</td><td>'+esc(r.status)+'</td></tr>'),'No RMAs for this machine.')+'</div>'
+   +'<div><h3>Recent activity</h3>'+tbl('<th>Date</th><th>Action</th><th>Detail</th>',mh.map(h=>'<tr><td class="mono nowrap">'+esc(h.date)+'</td><td><span class="act act-'+histCatOf(h)+'">'+esc(h.action)+'</span></td><td>'+esc(h.detail)+'</td></tr>'),'No activity yet.')+'</div></div>';
+}
+async function deleteRma(id){
+  const r=await getOne('rma',id); if(!r) return;
+  const ok=await confirmDialog({title:'Delete this RMA?',message:r.old+' → '+r.new+'\nThe affected unit goes back into '+(r.machine||'its machine')+' and the replacement '+(r.newCreated?'is removed.':'returns to stock.'),confirmLabel:'Delete RMA',danger:true});
+  if(!ok) return;
+  const [o,n]=await Promise.all([getOne('serials',r.old),getOne('serials',r.new)]);
+  await batch(['serials','rma'],st=>{
+    st.rma.delete(id);
+    if(o) st.serials.put(Object.assign({},o,{status:o.machine?'used':'in_stock',rma:false}));
+    if(n){ if(r.newCreated) st.serials.delete(n.sn); else st.serials.put(Object.assign({},n,{status:'in_stock',machine:'',rma:false})); }
+  });
+  await addHistory({action:'RMA deleted',pn:r.pn,sn:r.old,detail:'RMA '+r.old+' → '+r.new+' removed',machine:r.machine||'',order:r.order||''});
+  await renderAll(); toast('Deleted RMA');
+}
+async function refreshOld(pre){
+  const pn=$('f_pn').value, m=$('f_machine').value, sel=$('f_oldSel');
+  const list=(await getAll('serials')).filter(x=>x.status==='used'&&x.pn===pn&&x.machine===m);
+  sel.innerHTML=list.map(x=>'<option value="'+esc(x.sn)+'">'+esc(x.sn)+'</option>').join('')+'<option value="__manual__">Type serial number manually…</option>';
+  if(pre&&list.some(x=>x.sn===pre)) sel.value=pre;
+  else if(pre){ sel.value='__manual__'; $('f_old').value=pre; }
+  oldSelChange();
+}
+function oldSelChange(){ $('f_oldWrap').style.display=$('f_oldSel').value==='__manual__'?'flex':'none'; clearOldErr(); }
 
 /* ---------- toast ---------- */
 function toast(msg,type='success'){
@@ -663,7 +731,7 @@ async function renderAll(){
 
 /* ---------- history (shared row + filters + lazy loading) ---------- */
 const HIST_THEAD='<tr><th>Date &amp; time</th><th>Order / ticket</th><th>Machine</th><th>Name</th><th>Part number</th><th>SN</th><th>Storage</th><th>Detail</th><th>Action</th></tr>';
-const HIST_CATS=[['all','All'],['added','Added'],['edited','Edited'],['deleted','Deleted'],['incoming','Incoming'],['used','Used'],['rma','RMA']];
+const HIST_CATS=[['all','All'],['added','Added'],['edited','Edited'],['deleted','Deleted'],['incoming','Incoming'],['used','Used'],['rma','RMA'],['doa','DOA']];
 const HIST_RANGES=[['all','Any time'],['today','Today'],['7d','Last 7 days'],['30d','Last 30 days']];
 const HIST_BATCH=40;
 let histAll=[], histRows=[], histShown=0, histCatKey='all', histRangeKey='all';
@@ -671,6 +739,8 @@ let histAll=[], histRows=[], histShown=0, histCatKey='all', histRangeKey='all';
 function histCatOf(h){
   const a=(h.action||'').toLowerCase();
   if(/imported/.test(a)) return 'system';
+  if(/doa/.test(a)) return 'doa';
+  if(/rma/.test(a)) return 'rma';
   if(/deleted|removed/.test(a)) return 'deleted';
   if(/edited|renamed|adjusted|moved/.test(a)) return 'edited';
   if(/^(incoming|arrived|received)/.test(a)) return 'incoming';
@@ -753,6 +823,7 @@ async function renderDashboard(){
   $('statWaiting').className='readout-num'+(waiting>0?' accent':'');
   $('statRma').textContent=openRma;
   $('statRma').className='readout-num'+(openRma>0?' danger':'');
+  const doaN=serials.filter(s=>s.doa).length; $('statDoa').textContent=doaN; $('statDoa').className='readout-num'+(doaN>0?' doa':'');
   const recent=history.slice(-10).reverse();
   $('dashHistoryBody').innerHTML=recent.map(historyRowHTML).join('')||emptyRow(9,'No activity yet. Actions you take will show up here.');
   $('dashSeeMore').style.display=history.length?'flex':'none';
@@ -769,19 +840,20 @@ async function renderGlobalSearch(){
   const defaultEl=$('dashboardDefault');
   if(!q){ resultsEl.style.display='none'; resultsEl.innerHTML=''; defaultEl.style.display='block'; return; }
   defaultEl.style.display='none'; resultsEl.style.display='block';
-  const [parts,serials,storages,machines,incoming,rma,history]=await Promise.all([getAll('parts'),getAll('serials'),getAll('storages'),getAll('machines'),getAll('incoming'),getAll('rma'),getAll('history')]);
+  const [parts,serials,storages,machines,incoming,rma,history,stock]=await Promise.all([getAll('parts'),getAll('serials'),getAll('storages'),getAll('machines'),getAll('incoming'),getAll('rma'),getAll('history'),getAll('stock')]);
   const groups=[];
-  const partMatches=parts.filter(p=>p.pn.toLowerCase().includes(q)||p.name.toLowerCase().includes(q));
-  if(partMatches.length) groups.push({label:'Parts',items:partMatches.map(p=>({title:p.pn+' — '+p.name,sub:labelType(p.type),action:()=>switchView('parts')}))});
-  const serialMatches=serials.filter(s=>s.sn.toLowerCase().includes(q));
-  if(serialMatches.length) groups.push({label:'Serial numbers',items:serialMatches.map(s=>({title:s.sn,sub:s.pn+' · '+(s.status==='in_stock'?('in stock @ '+s.storage):(s.status==='used'?('used @ '+s.machine):'RMA')),action:()=>{ switchView('storage',{keep:true}); if(s.storage) openStorageDetail(s.storage); else openStorageDetail(null); }}))});
-  const storageMatches=storages.filter(s=>s.name.toLowerCase().includes(q));
-  if(storageMatches.length) groups.push({label:'Storages',items:storageMatches.map(s=>({title:s.name,sub:'Storage location',action:()=>{ switchView('storage',{keep:true}); openStorageDetail(s.name); }}))});
-  const machineMatches=machines.filter(m=>m.name.toLowerCase().includes(q));
-  if(machineMatches.length) groups.push({label:'Machines',items:machineMatches.map(m=>({title:m.name,sub:'Machine'+(m.group?' · '+m.group:''),action:()=>{ selectedGroup=m.group||NONE; machineExpand[m.name]=true; switchView('machines'); renderMachines(); }}))});
-  const incomingMatches=incoming.filter(i=>i.status==='Waiting'&&((i.pn||'').toLowerCase().includes(q)||(i.order||'').toLowerCase().includes(q)));
+  const where=pn=>{ const b={}; stock.filter(x=>x.pn===pn&&x.qty>0).forEach(x=>{ b[x.storage]=(b[x.storage]||0)+x.qty; }); serials.filter(x=>x.pn===pn&&x.status==='in_stock').forEach(x=>{ b[x.storage]=(b[x.storage]||0)+1; }); const k=Object.keys(b); return k.length?k.map(n=>b[n]+' @ '+n).join(', '):'Not in any storage'; };
+  const partMatches=parts.filter(p=>(p.pn+' '+p.name+' '+labelType(p.type)).toLowerCase().includes(q));
+  if(partMatches.length) groups.push({label:'Parts',items:partMatches.map(p=>{ const w=incoming.filter(i=>i.pn===p.pn&&i.status==='Waiting').length; return {title:p.pn+' — '+p.name,sub:labelType(p.type)+' · '+where(p.pn)+(w?' · '+w+' incoming':''),action:()=>goPart(p.pn)}; })});
+  const serialMatches=serials.filter(x=>[x.sn,x.pn,x.order,x.note,x.storage,x.machine,x.doa?'doa':'',x.rma?'rma':''].join(' ').toLowerCase().includes(q));
+  if(serialMatches.length) groups.push({label:'Serial numbers',items:serialMatches.map(x=>({title:x.sn+(x.doa?' · DOA':'')+(x.rma?' · RMA':''),sub:x.pn+' · '+(x.status==='in_stock'?('in stock @ '+x.storage):(x.status==='used'?('installed in '+x.machine):'RMA')),action:()=>{ if(x.status==='in_stock'){ switchView('storage',{keep:true}); openStorageDetail(x.storage,{pn:x.pn}); } else if(x.status==='used'){ selectedGroup=ALL; machineExpand[x.machine]=true; switchView('machines'); renderMachines(); } else switchView('rma'); }}))});
+  const storageMatches=storages.filter(x=>x.name.toLowerCase().includes(q));
+  if(storageMatches.length) groups.push({label:'Storages',items:storageMatches.map(x=>{ const n=stock.filter(y=>y.storage===x.name).reduce((a,y)=>a+y.qty,0)+serials.filter(y=>y.storage===x.name&&y.status==='in_stock').length; return {title:x.name,sub:plural(n,'unit')+' in stock',action:()=>{ switchView('storage',{keep:true}); openStorageDetail(x.name); }}; })});
+  const machineMatches=machines.filter(m=>(m.name+' '+(m.group||'')).toLowerCase().includes(q));
+  if(machineMatches.length) groups.push({label:'Machines',items:machineMatches.map(m=>({title:m.name,sub:'Machine'+(m.group?' · '+m.group:'')+' · '+plural(serials.filter(x=>x.status==='used'&&x.machine===m.name).length,'part')+' installed',action:()=>{ selectedGroup=ALL; machineExpand[m.name]=true; switchView('machines'); renderMachines(); }}))});
+  const incomingMatches=incoming.filter(i=>i.status==='Waiting'&&[i.pn,i.order,i.sn,i.storage].join(' ').toLowerCase().includes(q));
   if(incomingMatches.length) groups.push({label:'Incoming',items:incomingMatches.map(i=>({title:i.pn+' — Order '+i.order,sub:i.status+' → '+i.storage,action:()=>switchView('storage')}))});
-  const rmaMatches=rma.filter(r=>[r.order,r.old,r.new,r.pn].join(' ').toLowerCase().includes(q));
+  const rmaMatches=rma.filter(r=>[r.order,r.old,r.new,r.pn,r.machine].join(' ').toLowerCase().includes(q));
   if(rmaMatches.length) groups.push({label:'RMA',items:rmaMatches.map(r=>({title:r.old+' → '+r.new,sub:'Order '+r.order,action:()=>switchView('rma')}))});
   const historyMatches=history.filter(h=>histHay(h).includes(q)).slice(-30).reverse();
   if(historyMatches.length) groups.push({label:'History',items:historyMatches.map(h=>({title:h.action+' — '+h.pn,sub:h.detail,action:()=>switchView('history')}))});
@@ -800,14 +872,22 @@ async function renderGlobalSearch(){
 }
 
 /* ---------- parts ---------- */
+let partsFilter='all';
+const PART_CHIPS=[['all','All'],['serialised','Serialised'],['nonserialised','Non-serialised'],['consumable','Consumable'],['doa','DOA'],['rma','RMA']];
 async function renderParts(){
-  const [parts,stock,serials]=await Promise.all([getAll('parts'),getAll('stock'),getAll('serials')]);
+  const [all,stock,serials,rmas]=await Promise.all([getAll('parts'),getAll('stock'),getAll('serials'),getAll('rma')]);
+  const doaN=pn=>serials.filter(s=>s.pn===pn&&s.doa).length, rmaN=pn=>rmas.filter(r=>r.pn===pn).length;
+  const q=($('partsSearch').value||'').trim().toLowerCase();
+  const base=all.filter(p=>!q||(p.pn+' '+p.name).toLowerCase().includes(q));
+  const ok=(p,k)=>k==='all'||(k==='doa'?doaN(p.pn)>0:k==='rma'?rmaN(p.pn)>0:p.type===k);
+  $('partsChips').innerHTML=PART_CHIPS.map(c=>'<button type="button" class="fchip'+(partsFilter===c[0]?' active':'')+'" data-act="partsFilter" data-key="'+c[0]+'">'+c[1]+'<span class="n">'+base.filter(p=>ok(p,c[0])).length+'</span></button>').join('');
+  const parts=base.filter(p=>ok(p,partsFilter));
   $('partsBody').innerHTML=parts.map(p=>{
     const total=partStockTotal(p.pn,p,stock,serials);
-    return '<tr><td><span class="id-cell mono">'+esc(p.pn)+copyBtn(p.pn)+'</span></td><td>'+esc(p.name)+'</td><td><span class="badge badge-'+p.type+'">'+labelType(p.type)+'</span></td><td class="mono">'+total+'</td>'
+    return '<tr class="clickrow" data-act="goPart" data-pn="'+esc(p.pn)+'"><td><span class="id-cell mono">'+esc(p.pn)+copyBtn(p.pn)+'</span></td><td>'+esc(p.name)+'</td><td><span class="badge badge-'+p.type+'">'+labelType(p.type)+'</span>'+(doaN(p.pn)?'<span class="tag tag-doa">DOA '+doaN(p.pn)+'</span>':'')+(rmaN(p.pn)?'<span class="tag tag-rma">RMA '+rmaN(p.pn)+'</span>':'')+'</td><td class="mono">'+total+'</td>'
       +'<td class="actions-cell"><div class="row-actions"><button type="button" class="btn btn-ghost btn-sm" data-act="usePart" '+da({pn:p.pn})+'>Use</button>'
       +iconBtn('editPart',{pn:p.pn},ICON_EDIT,'Edit part')+iconBtn('delPart',{pn:p.pn},ICON_TRASH,'Delete part',true)+'</div></td></tr>';
-  }).join('')||emptyRow(5,'No parts yet. Add one to start tracking stock.');
+  }).join('')||emptyRow(5,all.length?'No parts match your search or filter.':'No parts yet. Add one to start tracking stock.');
 }
 async function deletePart(pn){
   const part=await getOne('parts',pn);
@@ -842,7 +922,7 @@ async function renderStorageGrid(){
   const [storages,stock,serials]=await Promise.all([getAll('storages'),getAll('stock'),getAll('serials')]);
   const cards=storages.map(s=>{
     const distinct=new Set([...stock.filter(x=>x.storage===s.name&&x.qty>0).map(x=>x.pn), ...serials.filter(x=>x.storage===s.name&&x.status==='in_stock').map(x=>x.pn)]);
-    return '<div class="storage-card" role="button" tabindex="0" data-act="openStorage" '+da({name:s.name})+'>'
+    return '<div class="storage-card'+(hlNames.has(s.name)?' hl':'')+'" role="button" tabindex="0" data-act="openStorage" '+da({name:s.name})+'>'
       +'<div class="card-actions">'+iconBtn('editStorage',{name:s.name},ICON_EDIT,'Rename storage')+iconBtn('delStorage',{name:s.name},ICON_TRASH,'Delete storage',true)+'</div>'
       +'<div class="storage-name">'+esc(s.name)+'</div><div class="storage-count">'+plural(distinct.size,'different part')+'</div></div>';
   }).join('');
@@ -878,12 +958,12 @@ async function renderStorageDetail(name){
           const info=idx[s.sn]||{};
           const order=s.order||info.order||'';
           const rec=s.date||info.date||'';
-          return '<tr><td><span class="id-cell mono">'+esc(s.sn)+copyBtn(s.sn)+'</span></td>'
+          return '<tr><td><span class="id-cell mono">'+esc(s.sn)+copyBtn(s.sn)+'</span>'+tagsHTML(s)+'</td>'
             +'<td>'+(order?('<span class="id-cell mono">'+esc(order)+copyBtn(order)+'</span>'):'<span class="hint">—</span>')+'</td>'
             +'<td class="nowrap">'+(esc(rec)||'<span class="hint">—</span>')+'</td>'
             +'<td>'+(s.note?esc(s.note):'<span class="hint">—</span>')+'</td>'
             +'<td class="actions-cell"><div class="row-actions"><button type="button" class="btn btn-ghost btn-sm" data-act="useSerial" '+da({pn:p.pn,sn:s.sn})+'>Use</button>'
-            +iconBtn('snHistory',{sn:s.sn},ICON_HIST,'See history of this serial')+iconBtn('editSerial',{sn:s.sn},ICON_EDIT,'Edit serial')+iconBtn('delSerial',{sn:s.sn},ICON_TRASH,'Remove serial',true)+'</div></td></tr>';
+            +'<button type="button" class="btn btn-ghost btn-sm" data-act="toggleDoa" '+da({sn:s.sn})+'>'+(s.doa?'Clear DOA':'DOA')+'</button>'+iconBtn('snHistory',{sn:s.sn},ICON_HIST,'See history of this serial')+iconBtn('editSerial',{sn:s.sn},ICON_EDIT,'Edit serial')+iconBtn('delSerial',{sn:s.sn},ICON_TRASH,'Remove serial',true)+'</div></td></tr>';
         }).join('')
         +'</tbody></table></div>'
         +(list.length>visible.length?'<div style="margin-top:10px"><button type="button" class="btn btn-ghost btn-sm" data-act="moreSerials" '+da({pn:p.pn})+'>Show 10 more ('+(list.length-visible.length)+' left)</button></div>':'')
@@ -914,10 +994,12 @@ async function renderStorageDetail(name){
     +(storageDetailMode==='serial'?serialTable:otherTable);
   updateHeader();
 }
-async function openStorageDetail(name){
+async function openStorageDetail(name,o){
+  o=o||{};
   currentStorageView=name;
   serialExpand={};
-  storageDetailMode='serial';
+  storageDetailMode=o.mode||'serial';
+  if(o.pn) serialExpand[o.pn]=10;
   await renderStorageView();
   updateHeader();
 }
@@ -1020,7 +1102,7 @@ function groupCard(key,title,count,actions){
     +'<div class="storage-name">'+esc(title)+'</div><div class="storage-count">'+plural(count,'machine')+'</div></div>';
 }
 async function renderMachines(){
-  const [machines,groups,serials]=await Promise.all([getAll('machines'),getAll('machineGroups'),getAll('serials')]);
+  const [machines,groups,serials,pts,rmas,hist]=await Promise.all([getAll('machines'),getAll('machineGroups'),getAll('serials'),getAll('parts'),getAll('rma'),getAll('history')]);
   if(selectedGroup!==null && selectedGroup!==ALL && selectedGroup!==NONE && !groups.some(g=>g.name===selectedGroup)) selectedGroup=ALL;
   const groupNames=new Set(groups.map(g=>g.name));
   const groupOf=m=>(m.group&&groupNames.has(m.group))?m.group:'';
@@ -1049,7 +1131,7 @@ async function renderMachines(){
         +(showGroupCol?'<td>'+(g?esc(g):'<span class="hint">No group</span>')+'</td>':'')
         +'<td class="mono">'+inst.length+'</td>'
         +'<td class="actions-cell"><div class="row-actions">'+iconBtn('editMachine',{name:m.name},ICON_EDIT,'Edit machine')+iconBtn('delMachine',{name:m.name},ICON_TRASH,'Delete machine',true)+'</div></td></tr>';
-      if(open) out+='<tr><td colspan="'+cols+'" class="serial-detail">'+(inst.length?inst.map(s=>'<span class="chip mono">'+esc(s.pn)+' · '+esc(s.sn)+copyBtn(s.sn)+'</span>').join(''):'<span class="hint">No serialised parts installed in this machine yet.</span>')+'</td></tr>';
+      if(open) out+='<tr><td colspan="'+cols+'" class="serial-detail">'+machineDetail(m,inst,g,pts,rmas,hist)+'</td></tr>';
       return out;
     }).join('');
     panel='<div class="panel-head"><h2 class="section-title">'+esc(label)+'<span class="count-pill">'+list.length+'</span></h2></div>'
@@ -1087,8 +1169,11 @@ async function deleteGroup(name){
 
 /* ---------- RMA ---------- */
 async function renderRMA(){
-  const rma=(await getAll('rma')).reverse();
-  $('rmaBody').innerHTML=rma.map(r=>'<tr><td><span class="id-cell mono">'+esc(r.order)+copyBtn(r.order)+'</span></td><td class="mono">'+esc(r.pn)+'</td><td><span class="id-cell mono">'+esc(r.old)+copyBtn(r.old)+'</span></td><td><span class="id-cell mono">'+esc(r.new)+copyBtn(r.new)+'</span></td><td>'+esc(r.machine||'—')+'</td><td>'+esc(r.status)+'</td></tr>').join('')||emptyRow(6,'No RMAs logged yet.');
+  const [rma,serials]=await Promise.all([getAll('rma'),getAll('serials')]);
+  const by={}; serials.forEach(x=>{ by[x.sn]=x; });
+  const sn=v=>'<span class="id-cell mono">'+esc(v)+copyBtn(v)+'</span>'+tagsHTML({rma:true,doa:(by[v]||{}).doa});
+  $('rmaBody').innerHTML=rma.reverse().map(r=>'<tr><td class="mono nowrap">'+esc(r.date||'—')+'</td><td>'+(r.order?'<span class="id-cell mono">'+esc(r.order)+copyBtn(r.order)+'</span>':'<span class="hint">—</span>')+'</td><td class="mono">'+esc(r.pn)+'</td><td>'+sn(r.old)+'</td><td>'+sn(r.new)+'</td><td>'+esc(r.machine||'—')+'</td><td>'+esc(r.status)+'</td>'
+    +'<td class="actions-cell"><div class="row-actions">'+iconBtn('editRma',{id:r.id},ICON_EDIT,'Edit RMA')+iconBtn('delRma',{id:r.id},ICON_TRASH,'Delete RMA',true)+'</div></td></tr>').join('')||emptyRow(8,'No RMAs logged yet.');
 }
 
 /* ---------- modal field helpers ---------- */
@@ -1108,8 +1193,8 @@ function focusFirstField(){
 }
 
 /* ---------- modal open/close ---------- */
-const MODAL_TITLES={part:['Add part','Edit part'],storage:['Add storage','Rename storage'],machine:['Add machine','Edit machine'],group:['Add group','Rename group'],receive:['Log incoming part','Edit incoming part'],use:['Use part'],rma:['New RMA'],editstock:['Edit quantity'],movestock:['Move stock'],serial:['Edit serial unit']};
-const MODAL_SUBMIT={part:['Add part','Save changes'],storage:['Add storage','Save changes'],machine:['Add machine','Save changes'],group:['Add group','Save changes'],receive:['Log incoming part','Save changes'],use:['Log usage'],rma:['Save RMA'],editstock:['Save quantity'],movestock:['Move stock'],serial:['Save changes']};
+const MODAL_TITLES={part:['Add part','Edit part'],storage:['Add storage','Rename storage'],machine:['Add machine','Edit machine'],group:['Add group','Rename group'],receive:['Log incoming part','Edit incoming part'],use:['Use part'],rma:['New RMA'],editstock:['Edit quantity'],movestock:['Move stock'],serial:['Edit serial unit'],rmaedit:['Edit RMA']};
+const MODAL_SUBMIT={part:['Add part','Save changes'],storage:['Add storage','Save changes'],machine:['Add machine','Save changes'],group:['Add group','Save changes'],receive:['Log incoming part','Save changes'],use:['Log usage'],rma:['Save RMA'],editstock:['Save quantity'],movestock:['Move stock'],serial:['Save changes'],rmaedit:['Save changes']};
 
 async function openModal(type,ctx){
   ctx=ctx||{};
@@ -1187,9 +1272,14 @@ async function openModal(type,ctx){
     if(!machines.length) return block('Add a machine first (Machines page) before logging an RMA.');
     body.innerHTML='<div class="field"><label>Part</label><select id="f_pn">'+parts.map(p=>'<option value="'+esc(p.pn)+'">'+esc(p.pn)+' — '+esc(p.name)+'</option>').join('')+'</select></div>'
       +machineSelectHTML('f_machine',machines)
-      +'<div class="field"><label>Affected serial number</label><div class="input-row"><input id="f_old" required oninput="clearOldErr()" onblur="checkOldSerial()">'+scanBtn('f_old')+'</div><div class="field-error" id="f_old_err"></div></div>'
+      +'<div class="field"><label>Affected serial number</label><select id="f_oldSel" onchange="oldSelChange()"></select><div class="input-row" id="f_oldWrap" style="display:none;margin-top:8px"><input id="f_old" placeholder="Type the serial number" oninput="clearOldErr()" onblur="checkOldSerial()">'+scanBtn('f_old')+'</div><div class="field-error" id="f_old_err"></div></div>'
       +'<div class="field"><label>Replacement serial number</label><div class="input-row"><input id="f_new" required>'+scanBtn('f_new')+'</div></div>'
-      +'<div class="field"><label>Order / ticket</label><input id="f_order" required></div>';
+      +'<div class="field"><label>Order / ticket (optional)</label><input id="f_order"></div>'
+      +'<div class="field radio-row"><label><input type="checkbox" id="f_doa"> Dead on arrival (DOA)</label></div>';
+    $('f_pn').onchange=()=>refreshOld(); $('f_machine').onchange=()=>refreshOld();
+    if(ctx.pn) $('f_pn').value=ctx.pn;
+    if(ctx.machine) $('f_machine').value=ctx.machine;
+    await refreshOld(ctx.old);
   } else if(type==='editstock'){
     const [p,st]=await Promise.all([getOne('parts',ctx.pn),getOne('stock',[ctx.pn,ctx.storage])]);
     if(!p) return block('This part no longer exists.');
@@ -1204,6 +1294,12 @@ async function openModal(type,ctx){
     body.innerHTML='<div class="info-block"><div><span>Part</span><b class="mono">'+esc(ctx.pn)+'</b> · '+esc(p?p.name:'')+'</div><div><span>From</span><b>'+esc(ctx.storage)+'</b> ('+avail+' available)</div></div>'
       +'<div class="field"><label>Move to</label><select id="f_dest">'+others.map(s=>'<option value="'+esc(s.name)+'">'+esc(s.name)+'</option>').join('')+'</select></div>'
       +'<div class="field"><label>Quantity to move</label><input id="f_qty" type="number" min="1" max="'+avail+'" required value="'+avail+'"></div>';
+  } else if(type==='rmaedit'){
+    const r=await getOne('rma',ctx.id);
+    if(!r) return block('This RMA no longer exists.');
+    body.innerHTML='<div class="info-block"><div><span>Part</span><b class="mono">'+esc(r.pn)+'</b></div><div><span>Affected</span><b class="mono">'+esc(r.old)+'</b></div><div><span>Replacement</span><b class="mono">'+esc(r.new)+'</b></div><div><span>Machine</span><b>'+esc(r.machine||'—')+'</b></div></div>'
+      +'<div class="field"><label>Order / ticket</label><input id="f_order" value="'+esc(r.order||'')+'"></div>'
+      +'<div class="field"><label>Status</label><select id="f_status"><option'+(r.status!=='Closed'?' selected':'')+'>Replaced</option><option'+(r.status==='Closed'?' selected':'')+'>Closed</option></select></div>';
   } else if(type==='serial'){
     const [s,storages,history]=await Promise.all([getOne('serials',ctx.sn),getAll('storages'),getAll('history')]);
     if(!s) return block('That serial number no longer exists.');
@@ -1257,10 +1353,11 @@ $('modalForm').addEventListener('submit',async e=>{
   if(btn.disabled||!SAVERS[modalType]) return;
   btn.disabled=true;
   try{
-    const r=await SAVERS[modalType]();
+    pendingRma=null; const r=await SAVERS[modalType]();
     closeModal();
     await renderAll();
     if(r){ if(typeof r==='string') toast(r); else toast(r.msg,r.type||'success'); }
+    if(pendingRma){ const q=pendingRma; pendingRma=null; if(await confirmDialog({title:'Create an RMA?',message:'Serial '+q.old+' is now installed in '+q.machine+'.\nDo you want to create an RMA for this part now?',confirmLabel:'Create RMA'})){ switchView('rma'); await openModal('rma',q); } }
   }catch(err){
     toast((err&&err.message)||'Something went wrong. Please try again.','error');
   }finally{ btn.disabled=false; }
@@ -1413,7 +1510,7 @@ async function saveUse(){
     if(!sn) throw new Error('Choose a serial number.');
     const serial=await getOne('serials',sn);
     if(!serial||serial.status!=='in_stock') throw new Error('That serial number isn’t in stock.');
-    serial.status='used'; serial.machine=machine;
+    serial.status='used'; serial.machine=machine; serial.usedDate=now(); pendingRma={pn,machine,old:sn};
     await put('serials',serial);
     await addHistory({action:'Used',pn,name:part.name,sn,detail:'Serial '+sn+' installed',machine,storage:serial.storage,order});
     return 'Logged: serial '+sn+' → '+machine;
@@ -1428,24 +1525,32 @@ async function saveUse(){
   return 'Logged: '+qty+' × '+pn+' → '+machine;
 }
 async function saveRMA(){
-  const pn=$('f_pn').value;
-  const machine=$('f_machine').value.trim();
-  const old=$('f_old').value.trim();
-  const nw=$('f_new').value.trim();
-  const order=$('f_order').value.trim();
-  if(!machine||!old||!nw||!order) throw new Error('All RMA fields are required.');
+  const pn=$('f_pn').value, machine=$('f_machine').value.trim(), nw=$('f_new').value.trim(), order=$('f_order').value.trim(), doa=$('f_doa').checked;
+  const sel=$('f_oldSel').value, old=(sel==='__manual__'?$('f_old').value:sel).trim();
+  if(!machine||!old||!nw) throw new Error('Machine, affected serial and replacement serial are required.');
   if(old.toLowerCase()===nw.toLowerCase()) throw new Error('The replacement serial number must be different from the affected one.');
   if((await getAll('rma')).some(r=>r.old.toLowerCase()===old.toLowerCase())) throw new Error('This serial number has already been logged in an RMA.');
-  const existingNew=await getOne('serials',nw);
-  if(existingNew&&existingNew.status!=='in_stock') throw new Error('Serial number “'+nw+'” is already used or in an RMA.');
-  const part=await getOne('parts',pn);
-  const oldSerial=await getOne('serials',old);
-  const storage=existingNew?existingNew.storage:(oldSerial?oldSerial.storage:'');
-  if(oldSerial){ oldSerial.status='rma'; await put('serials',oldSerial); }
-  await put('serials',{sn:nw,pn,storage,status:'in_stock',machine:'',order:order,date:now(),note:'Replacement for '+old});
-  await addRec('rma',{pn,order,old,new:nw,status:'Replaced',date:now(),machine});
+  const nSer=await getOne('serials',nw), oSer=await getOne('serials',old), part=await getOne('parts',pn);
+  if(nSer&&nSer.status!=='in_stock') throw new Error('Serial number “'+nw+'” is already used or in an RMA.');
+  if(nSer&&nSer.pn!==pn) throw new Error('“'+nw+'” belongs to a different part ('+nSer.pn+').');
+  const storage=nSer?nSer.storage:(oSer?oSer.storage:''), t=now();
+  await batch(['serials','rma'],st=>{
+    st.serials.put(Object.assign({sn:old,pn,storage:'',machine,order:'',date:'',note:''},oSer||{},{status:'rma',rma:true,doa:doa||!!(oSer&&oSer.doa)}));
+    st.serials.put(Object.assign({sn:nw,pn,storage,order,date:t,note:'Replacement for '+old},nSer||{},{status:'used',machine,rma:true,usedDate:t}));
+    st.rma.add({pn,order,old,new:nw,status:'Replaced',date:t,ts:Date.now(),machine,newCreated:!nSer});
+  });
   await addHistory({action:'RMA replaced',pn,name:part?part.name:'',sn:old,detail:'Serial '+old+' → '+nw,machine,storage,order});
+  if(doa&&!(oSer&&oSer.doa)) await addHistory({action:'DOA tagged',pn,name:part?part.name:'',sn:old,detail:'Serial '+old+' tagged as dead on arrival (RMA)',machine,storage,order});
   return 'RMA saved: '+old+' → '+nw+' on '+machine;
+}
+async function saveRmaEdit(){
+  const r=await getOne('rma',modalCtx.id); if(!r) throw new Error('This RMA no longer exists.');
+  const order=$('f_order').value.trim(), status=$('f_status').value;
+  const detail=diffText([['Order',r.order,order],['Status',r.status,status]]);
+  if(!detail) return NOCHANGE;
+  await put('rma',Object.assign({},r,{order,status}));
+  await addHistory({action:'RMA edited',pn:r.pn,sn:r.old,detail,machine:r.machine||'',order});
+  return 'Updated RMA';
 }
 async function saveEditStock(){
   const pn=modalCtx.pn, storage=modalCtx.storage;
@@ -1494,10 +1599,10 @@ async function saveSerial(){
   await addHistory({action:'Serial edited',pn:s.pn,name:part?part.name:'',sn:newSn,detail,storage});
   return 'Updated serial '+newSn;
 }
-const SAVERS={part:savePart,storage:saveStorage,machine:saveMachine,group:saveGroup,receive:saveReceive,use:saveUse,rma:saveRMA,editstock:saveEditStock,movestock:saveMoveStock,serial:saveSerial};
+const SAVERS={part:savePart,storage:saveStorage,machine:saveMachine,group:saveGroup,receive:saveReceive,use:saveUse,rma:saveRMA,editstock:saveEditStock,movestock:saveMoveStock,serial:saveSerial,rmaedit:saveRmaEdit};
 
 /* ---------- export / import (CSV) ---------- */
-const CSV_COLS=['record_type','pn','name','type','group','storage','qty','sn','machine','status','order','old','new','date','ts','action','detail','note'];
+const CSV_COLS=['record_type','pn','name','type','group','storage','qty','sn','machine','status','order','old','new','date','ts','action','detail','note','doa','rma','used_date','new_created'];
 function csvEscape(v){ v=(v===null||v===undefined?'':v).toString(); return /[",\r\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; }
 async function exportCSV(){
   try{
@@ -1509,9 +1614,9 @@ async function exportCSV(){
     groups.forEach(g=>push({record_type:'MACHINE_GROUP',name:g.name}));
     machines.forEach(m=>push({record_type:'MACHINE',name:m.name,group:m.group||''}));
     stock.forEach(s=>push({record_type:'STOCK',pn:s.pn,storage:s.storage,qty:s.qty}));
-    serials.forEach(s=>push({record_type:'SERIAL',pn:s.pn,storage:s.storage,sn:s.sn,status:s.status,machine:s.machine,order:s.order,date:s.date,note:s.note}));
+    serials.forEach(s=>push({record_type:'SERIAL',pn:s.pn,storage:s.storage,sn:s.sn,status:s.status,machine:s.machine,order:s.order,date:s.date,note:s.note,doa:s.doa?1:'',rma:s.rma?1:'',used_date:s.usedDate}));
     incoming.forEach(i=>push({record_type:'INCOMING',pn:i.pn,storage:i.storage,order:i.order,qty:i.qty,sn:i.sn,status:i.status,date:i.date}));
-    rma.forEach(r=>push({record_type:'RMA',pn:r.pn,order:r.order,old:r.old,new:r.new,machine:r.machine,status:r.status,date:r.date}));
+    rma.forEach(r=>push({record_type:'RMA',pn:r.pn,order:r.order,old:r.old,new:r.new,machine:r.machine,status:r.status,date:r.date,ts:r.ts,new_created:r.newCreated?1:''}));
     history.forEach(h=>push({record_type:'HISTORY',pn:h.pn,name:h.name,sn:h.sn,date:h.date,ts:h.ts,action:h.action,detail:h.detail,machine:h.machine,storage:h.storage,order:h.order}));
     const blob=new Blob(['\uFEFF'+rows.join('\r\n')],{type:'text/csv;charset=utf-8'});
     const a=document.createElement('a');
@@ -1553,9 +1658,9 @@ function parseBackup(text){
       case 'MACHINE_GROUP': if(o.name) d.machineGroups.push({name:o.name}); break;
       case 'MACHINE': if(o.name) d.machines.push({name:o.name,group:o.group||''}); break;
       case 'STOCK': if(o.pn&&o.storage) d.stock.push({pn:o.pn,storage:o.storage,qty:parseInt(o.qty,10)||0}); break;
-      case 'SERIAL': if(o.sn&&o.pn) d.serials.push({sn:o.sn,pn:o.pn,storage:o.storage,status:o.status||'in_stock',machine:o.machine||'',order:o.order||'',date:o.date||'',note:o.note||''}); break;
+      case 'SERIAL': if(o.sn&&o.pn) d.serials.push({sn:o.sn,pn:o.pn,storage:o.storage,status:o.status||'in_stock',machine:o.machine||'',order:o.order||'',date:o.date||'',note:o.note||'',doa:o.doa==='1',rma:o.rma==='1',usedDate:o.used_date||''}); break;
       case 'INCOMING': if(o.pn) d.incoming.push({pn:o.pn,storage:o.storage,order:o.order,qty:o.sn?null:(parseInt(o.qty,10)||1),sn:o.sn||null,status:o.status||'Waiting',date:o.date||''}); break;
-      case 'RMA': if(o.old||o.new) d.rma.push({pn:o.pn,order:o.order,old:o.old,new:o.new,machine:o.machine||'',status:o.status||'Replaced',date:o.date||''}); break;
+      case 'RMA': if(o.old||o.new) d.rma.push({pn:o.pn,order:o.order,old:o.old,new:o.new,machine:o.machine||'',status:o.status||'Replaced',date:o.date||'',ts:parseInt(o.ts,10)||0,newCreated:o.new_created==='1'}); break;
       case 'HISTORY': d.history.push({pn:o.pn||'—',name:o.name||'',sn:o.sn||'',action:o.action||'',detail:o.detail||'',machine:o.machine||'',storage:o.storage||'',order:o.order||'',date:o.date||'',ts:parseInt(o.ts,10)||parseHistDate(o.date)||0}); break;
     }
   });
@@ -1646,6 +1751,11 @@ const ACTIONS={
   editMachine:d=>openModal('machine',{name:d.name}),
   delMachine:d=>deleteMachine(d.name),
   toggleMachine:d=>{ machineExpand[d.name]=!machineExpand[d.name]; return renderMachines(); },
+  goPart:d=>goPart(d.pn),
+  partsFilter:d=>{ partsFilter=d.key; return renderParts(); },
+  toggleDoa:d=>toggleDoa(d.sn),
+  editRma:d=>openModal('rmaedit',{id:+d.id}),
+  delRma:d=>deleteRma(+d.id),
   histType:d=>{ histCatKey=d.key; applyHistoryFilters(); },
   histRange:d=>{ histRangeKey=d.key; applyHistoryFilters(); }
 };
