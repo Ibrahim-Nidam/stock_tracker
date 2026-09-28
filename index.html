@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -17,12 +17,6 @@
     box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
   }
   *,*::before,*::after{box-sizing:inherit}
-  @media (prefers-color-scheme:dark){ :root:not([data-theme="light"]){
-    --bg:#0d1116; --surface:#141a20; --ink:#eef1f3; --muted:#93a0ab;
-    --line:#eef1f3; --line-soft:#232b32; --hover:#1b2229;
-    --bar-bg:#070c11; --bar-ink:#eef1f3; --bar-muted:#63737f;
-    --accent:#e3ab19; --danger:#e2604a; --danger-soft:rgba(226,96,74,.12); --good:#4caf7d; --info:#5b9be0; --rma:#a78bea; --doa:#f06595;
-  }}
   :root[data-theme="dark"]{
     --bg:#0d1116; --surface:#141a20; --ink:#eef1f3; --muted:#93a0ab;
     --line:#eef1f3; --line-soft:#232b32; --hover:#1b2229;
@@ -38,7 +32,7 @@
 
   .app-shell{display:flex; min-height:100%}
 
-  .sidebar{width:222px; flex-shrink:0; background:var(--bar-bg); color:var(--bar-ink); display:flex; flex-direction:column; padding:20px 16px}
+  .sidebar{width:222px; flex-shrink:0; background:var(--bar-bg); color:var(--bar-ink); display:flex; flex-direction:column; padding:20px 16px; position:sticky; top:0; align-self:flex-start; height:100vh; height:100dvh; overflow-y:auto}
   .brand{display:flex; flex-direction:column; gap:2px; padding-bottom:18px; margin-bottom:6px; border-bottom:1px solid rgba(255,255,255,.1)}
   .brand-mark{font-size:16px; font-weight:700; letter-spacing:-.01em}
   .brand-sub{font-size:11.5px; color:var(--bar-muted)}
@@ -266,7 +260,7 @@
 
   @media (max-width:820px){
     .app-shell{flex-direction:column}
-    .sidebar{width:100%; flex-direction:row; align-items:center; gap:4px; padding:8px 14px; position:sticky; top:env(safe-area-inset-top,0px); z-index:10; overflow-x:auto}
+    .sidebar{width:100%; flex-direction:row; align-items:center; gap:4px; padding:8px 14px; position:sticky; top:env(safe-area-inset-top,0px); z-index:10; overflow-x:auto; overflow-y:hidden; height:auto; align-self:auto}
     .brand{border-bottom:none; padding-bottom:0; margin-bottom:0; flex-shrink:0; margin-right:6px}
     .brand-sub{display:none}
     nav{flex-direction:row}
@@ -507,6 +501,23 @@ async function snTaken(sn,exceptIncomingId){
   return (await getAll('incoming')).some(i=>i.status==='Waiting'&&i.sn===sn&&i.id!==exceptIncomingId);
 }
 
+/* An RMA'd serial is the AFFECTED part (the faulty one handed back to the client).
+   Once declared it must never be installed, received or used as a replacement again. */
+async function rmaDeclared(sn){
+  const v=(sn||'').trim().toLowerCase(); if(!v) return null;
+  return (await getAll('rma')).find(r=>(r.old||'').toLowerCase()===v)||null;
+}
+function rmaDeniedMsg(sn,r){
+  return 'Serial “'+sn+'” was already declared as an RMA (affected part'+(r.order?', order '+r.order:'')+(r.machine?', from '+r.machine:'')+'). It can’t be installed, received or used as a replacement again.';
+}
+/* only affected serials carry the RMA flag - replacements never do */
+async function normalizeRmaFlags(){
+  const [rma,serials]=await Promise.all([getAll('rma'),getAll('serials')]);
+  const affected=new Set(rma.map(r=>r.old));
+  const fix=serials.filter(s=>!!s.rma!==affected.has(s.sn));
+  if(!fix.length) return;
+  await batch(['serials'],st=>{ fix.forEach(s=>st.serials.put(Object.assign({},s,{rma:affected.has(s.sn)}))); });
+}
 function tagsHTML(s){ return (s.doa?'<span class="tag tag-doa">DOA</span>':'')+(s.rma?'<span class="tag tag-rma">RMA</span>':''); }
 let hlNames=new Set(), hlTimer;
 async function goPart(pn){
@@ -527,16 +538,23 @@ async function toggleDoa(sn){
   await renderAll();
   toast(on?sn+' tagged as DOA':'DOA tag removed from '+sn);
 }
-function machineDetail(m,inst,g,parts,rma,hist){
+/* machine activity = parts going in / out of the machine, or consumables used on it */
+function isMachineEvent(h){ const a=(h.action||'').toLowerCase(); return /^used/.test(a)||/part removed/.test(a)||/^rma replaced/.test(a); }
+function machineEventLabel(h){
+  const a=(h.action||'').toLowerCase();
+  if(/part removed/.test(a)) return 'Removed';
+  if(/^rma replaced/.test(a)) return 'Replaced';
+  return h.sn?'Installed':'Used';
+}
+function machineDetail(m,inst,g,parts,hist){
   const nm={}; parts.forEach(p=>{ nm[p.pn]=p.name; });
-  const mr=rma.filter(r=>r.machine===m.name).reverse(), mh=hist.filter(h=>h.machine===m.name).slice(-5).reverse();
+  const ev=hist.filter(h=>h.machine===m.name&&isMachineEvent(h)).reverse(), mh=ev.slice(0,8);
   const kv=(k,v)=>'<div>'+k+'<b>'+v+'</b></div>';
   const tbl=(h,rows,empty)=>rows.length?'<div class="table-scroll"><table class="sub-table"><thead><tr>'+h+'</tr></thead><tbody>'+rows.join('')+'</tbody></table></div>':'<span class="hint">'+empty+'</span>';
   const inDate=s=>s.usedDate||(hist.filter(h=>h.sn===s.sn&&/^used/i.test(h.action)).pop()||{}).date||'—';
-  return '<div class="mdetail"><div class="kv">'+kv('Group',esc(g||'No group'))+kv('Installed parts',inst.length)+kv('RMAs',mr.length)+kv('DOA units',inst.filter(s=>s.doa).length)+kv('Last activity',esc(mh.length?mh[0].date:'—'))+'</div>'
+  return '<div class="mdetail"><div class="kv">'+kv('Group',esc(g||'No group'))+kv('Installed parts',inst.length)+kv('Last activity',esc(ev.length?ev[0].date:'—'))+'</div>'
    +'<div><h3>Installed parts</h3>'+tbl('<th>Part number</th><th>Name</th><th>Serial number</th><th>Installed</th><th>Received order</th>',inst.map(s=>'<tr><td class="mono">'+esc(s.pn)+'</td><td>'+esc(nm[s.pn]||'—')+'</td><td><span class="id-cell mono">'+esc(s.sn)+copyBtn(s.sn)+'</span>'+tagsHTML(s)+'</td><td class="nowrap">'+esc(inDate(s))+'</td><td class="mono">'+esc(s.order||'—')+'</td></tr>'),'No serialised parts installed in this machine yet.')+'</div>'
-   +'<div><h3>RMAs on this machine</h3>'+tbl('<th>Date</th><th>Order / ticket</th><th>Affected → replacement</th><th>Status</th>',mr.map(r=>'<tr><td class="mono nowrap">'+esc(r.date||'—')+'</td><td class="mono">'+esc(r.order||'—')+'</td><td class="mono">'+esc(r.old)+' → '+esc(r.new)+'</td><td>'+esc(r.status)+'</td></tr>'),'No RMAs for this machine.')+'</div>'
-   +'<div><h3>Recent activity</h3>'+tbl('<th>Date</th><th>Action</th><th>Detail</th>',mh.map(h=>'<tr><td class="mono nowrap">'+esc(h.date)+'</td><td><span class="act act-'+histCatOf(h)+'">'+esc(h.action)+'</span></td><td>'+esc(h.detail)+'</td></tr>'),'No activity yet.')+'</div></div>';
+   +'<div><h3>Recent activity</h3>'+tbl('<th>Date</th><th>Action</th><th>Part</th><th>Detail</th>',mh.map(h=>{ const lbl=machineEventLabel(h); return '<tr><td class="mono nowrap">'+esc(h.date)+'</td><td><span class="act act-'+(lbl==='Removed'||lbl==='Replaced'?'rma':'used')+'">'+esc(lbl)+'</span></td><td><span class="mono">'+esc(h.pn)+'</span>'+(nm[h.pn]||h.name?' <span class="hint">'+esc(nm[h.pn]||h.name)+'</span>':'')+'</td><td>'+esc(h.detail)+'</td></tr>'; }),'No parts installed, removed or used on this machine yet.')+'</div></div>';
 }
 async function deleteRma(id){
   const r=await getOne('rma',id); if(!r) return;
@@ -548,7 +566,10 @@ async function deleteRma(id){
     if(o) st.serials.put(Object.assign({},o,{status:o.machine?'used':'in_stock',rma:false}));
     if(n){ if(r.newCreated) st.serials.delete(n.sn); else st.serials.put(Object.assign({},n,{status:'in_stock',machine:'',rma:false})); }
   });
-  await addHistory({action:'RMA deleted',pn:r.pn,sn:r.old,detail:'RMA '+r.old+' → '+r.new+' removed',machine:r.machine||'',order:r.order||''});
+  const dpart=await getOne('parts',r.pn), dname=dpart?dpart.name:'';
+  await addHistory({action:'RMA deleted',pn:r.pn,name:dname,sn:r.old,detail:'RMA '+r.old+' → '+r.new+' removed',machine:r.machine||'',order:r.order||''});
+  if(r.machine&&n) await addHistory({action:'RMA: part removed',pn:r.pn,name:dname,sn:r.new,detail:'Serial '+r.new+' taken out of '+r.machine+' (RMA deleted)',machine:r.machine,order:r.order||''});
+  if(r.machine&&o&&o.machine) await addHistory({action:'Used',pn:r.pn,name:dname,sn:r.old,detail:'Serial '+r.old+' put back in '+r.machine+' (RMA deleted)',machine:r.machine,storage:o.storage||'',order:r.order||''});
   await renderAll(); toast('Deleted RMA');
 }
 async function refreshOld(pre){
@@ -958,11 +979,12 @@ async function renderStorageDetail(name){
           const info=idx[s.sn]||{};
           const order=s.order||info.order||'';
           const rec=s.date||info.date||'';
-          return '<tr><td><span class="id-cell mono">'+esc(s.sn)+copyBtn(s.sn)+'</span>'+tagsHTML(s)+'</td>'
+          return '<tr><td><span class="id-cell mono">'+esc(s.sn)+copyBtn(s.sn)+'</span>'+tagsHTML({doa:s.doa})+'</td>'
             +'<td>'+(order?('<span class="id-cell mono">'+esc(order)+copyBtn(order)+'</span>'):'<span class="hint">—</span>')+'</td>'
             +'<td class="nowrap">'+(esc(rec)||'<span class="hint">—</span>')+'</td>'
             +'<td>'+(s.note?esc(s.note):'<span class="hint">—</span>')+'</td>'
             +'<td class="actions-cell"><div class="row-actions"><button type="button" class="btn btn-ghost btn-sm" data-act="useSerial" '+da({pn:p.pn,sn:s.sn})+'>Use</button>'
+            +'<button type="button" class="btn btn-ghost btn-sm" data-act="moveSerial" '+da({sn:s.sn})+'>Move</button>'
             +'<button type="button" class="btn btn-ghost btn-sm" data-act="toggleDoa" '+da({sn:s.sn})+'>'+(s.doa?'Clear DOA':'DOA')+'</button>'+iconBtn('snHistory',{sn:s.sn},ICON_HIST,'See history of this serial')+iconBtn('editSerial',{sn:s.sn},ICON_EDIT,'Edit serial')+iconBtn('delSerial',{sn:s.sn},ICON_TRASH,'Remove serial',true)+'</div></td></tr>';
         }).join('')
         +'</tbody></table></div>'
@@ -1069,6 +1091,7 @@ async function renderIncoming(){
 async function markArrived(id){
   const rec=await getOne('incoming',id);
   if(!rec||rec.status!=='Waiting') return;
+  if(rec.sn){ const d=await rmaDeclared(rec.sn); if(d){ toast(rmaDeniedMsg(rec.sn,d),'error'); return; } }
   if(rec.sn && await getOne('serials',rec.sn)){ toast('Serial “'+rec.sn+'” already exists in the system. Edit this incoming entry first.','error'); return; }
   rec.status='Arrived';
   await put('incoming',rec);
@@ -1102,7 +1125,7 @@ function groupCard(key,title,count,actions){
     +'<div class="storage-name">'+esc(title)+'</div><div class="storage-count">'+plural(count,'machine')+'</div></div>';
 }
 async function renderMachines(){
-  const [machines,groups,serials,pts,rmas,hist]=await Promise.all([getAll('machines'),getAll('machineGroups'),getAll('serials'),getAll('parts'),getAll('rma'),getAll('history')]);
+  const [machines,groups,serials,pts,hist]=await Promise.all([getAll('machines'),getAll('machineGroups'),getAll('serials'),getAll('parts'),getAll('history')]);
   if(selectedGroup!==null && selectedGroup!==ALL && selectedGroup!==NONE && !groups.some(g=>g.name===selectedGroup)) selectedGroup=ALL;
   const groupNames=new Set(groups.map(g=>g.name));
   const groupOf=m=>(m.group&&groupNames.has(m.group))?m.group:'';
@@ -1131,7 +1154,7 @@ async function renderMachines(){
         +(showGroupCol?'<td>'+(g?esc(g):'<span class="hint">No group</span>')+'</td>':'')
         +'<td class="mono">'+inst.length+'</td>'
         +'<td class="actions-cell"><div class="row-actions">'+iconBtn('editMachine',{name:m.name},ICON_EDIT,'Edit machine')+iconBtn('delMachine',{name:m.name},ICON_TRASH,'Delete machine',true)+'</div></td></tr>';
-      if(open) out+='<tr><td colspan="'+cols+'" class="serial-detail">'+machineDetail(m,inst,g,pts,rmas,hist)+'</td></tr>';
+      if(open) out+='<tr><td colspan="'+cols+'" class="serial-detail">'+machineDetail(m,inst,g,pts,hist)+'</td></tr>';
       return out;
     }).join('');
     panel='<div class="panel-head"><h2 class="section-title">'+esc(label)+'<span class="count-pill">'+list.length+'</span></h2></div>'
@@ -1171,8 +1194,8 @@ async function deleteGroup(name){
 async function renderRMA(){
   const [rma,serials]=await Promise.all([getAll('rma'),getAll('serials')]);
   const by={}; serials.forEach(x=>{ by[x.sn]=x; });
-  const sn=v=>'<span class="id-cell mono">'+esc(v)+copyBtn(v)+'</span>'+tagsHTML({rma:true,doa:(by[v]||{}).doa});
-  $('rmaBody').innerHTML=rma.reverse().map(r=>'<tr><td class="mono nowrap">'+esc(r.date||'—')+'</td><td>'+(r.order?'<span class="id-cell mono">'+esc(r.order)+copyBtn(r.order)+'</span>':'<span class="hint">—</span>')+'</td><td class="mono">'+esc(r.pn)+'</td><td>'+sn(r.old)+'</td><td>'+sn(r.new)+'</td><td>'+esc(r.machine||'—')+'</td><td>'+esc(r.status)+'</td>'
+  const sn=(v,affected)=>'<span class="id-cell mono">'+esc(v)+copyBtn(v)+'</span>'+tagsHTML({rma:!!affected,doa:(by[v]||{}).doa});
+  $('rmaBody').innerHTML=rma.reverse().map(r=>'<tr><td class="mono nowrap">'+esc(r.date||'—')+'</td><td>'+(r.order?'<span class="id-cell mono">'+esc(r.order)+copyBtn(r.order)+'</span>':'<span class="hint">—</span>')+'</td><td class="mono">'+esc(r.pn)+'</td><td>'+sn(r.old,true)+'</td><td>'+sn(r.new,false)+'</td><td>'+esc(r.machine||'—')+'</td><td>'+esc(r.status)+'</td>'
     +'<td class="actions-cell"><div class="row-actions">'+iconBtn('editRma',{id:r.id},ICON_EDIT,'Edit RMA')+iconBtn('delRma',{id:r.id},ICON_TRASH,'Delete RMA',true)+'</div></td></tr>').join('')||emptyRow(8,'No RMAs logged yet.');
 }
 
@@ -1193,8 +1216,8 @@ function focusFirstField(){
 }
 
 /* ---------- modal open/close ---------- */
-const MODAL_TITLES={part:['Add part','Edit part'],storage:['Add storage','Rename storage'],machine:['Add machine','Edit machine'],group:['Add group','Rename group'],receive:['Log incoming part','Edit incoming part'],use:['Use part'],rma:['New RMA'],editstock:['Edit quantity'],movestock:['Move stock'],serial:['Edit serial unit'],rmaedit:['Edit RMA']};
-const MODAL_SUBMIT={part:['Add part','Save changes'],storage:['Add storage','Save changes'],machine:['Add machine','Save changes'],group:['Add group','Save changes'],receive:['Log incoming part','Save changes'],use:['Log usage'],rma:['Save RMA'],editstock:['Save quantity'],movestock:['Move stock'],serial:['Save changes'],rmaedit:['Save changes']};
+const MODAL_TITLES={part:['Add part','Edit part'],storage:['Add storage','Rename storage'],machine:['Add machine','Edit machine'],group:['Add group','Rename group'],receive:['Log incoming part','Edit incoming part'],use:['Use part'],rma:['New RMA'],editstock:['Edit quantity'],movestock:['Move stock'],moveserial:['Move serial'],serial:['Edit serial unit'],rmaedit:['Edit RMA']};
+const MODAL_SUBMIT={part:['Add part','Save changes'],storage:['Add storage','Save changes'],machine:['Add machine','Save changes'],group:['Add group','Save changes'],receive:['Log incoming part','Save changes'],use:['Log usage'],rma:['Save RMA'],editstock:['Save quantity'],movestock:['Move stock'],moveserial:['Move serial'],serial:['Save changes'],rmaedit:['Save changes']};
 
 async function openModal(type,ctx){
   ctx=ctx||{};
@@ -1273,9 +1296,8 @@ async function openModal(type,ctx){
     body.innerHTML='<div class="field"><label>Part</label><select id="f_pn">'+parts.map(p=>'<option value="'+esc(p.pn)+'">'+esc(p.pn)+' — '+esc(p.name)+'</option>').join('')+'</select></div>'
       +machineSelectHTML('f_machine',machines)
       +'<div class="field"><label>Affected serial number</label><select id="f_oldSel" onchange="oldSelChange()"></select><div class="input-row" id="f_oldWrap" style="display:none;margin-top:8px"><input id="f_old" placeholder="Type the serial number" oninput="clearOldErr()" onblur="checkOldSerial()">'+scanBtn('f_old')+'</div><div class="field-error" id="f_old_err"></div></div>'
-      +'<div class="field"><label>Replacement serial number</label><div class="input-row"><input id="f_new" required>'+scanBtn('f_new')+'</div></div>'
-      +'<div class="field"><label>Order / ticket (optional)</label><input id="f_order"></div>'
-      +'<div class="field radio-row"><label><input type="checkbox" id="f_doa"> Dead on arrival (DOA)</label></div>';
+      +'<div class="field"><label>Replacement serial number</label><div class="input-row"><input id="f_new" required oninput="clearNewErr()" onblur="checkNewSerial()">'+scanBtn('f_new')+'</div><div class="field-error" id="f_new_err"></div></div>'
+      +'<div class="field"><label>Order / ticket (optional)</label><input id="f_order"></div>';
     $('f_pn').onchange=()=>refreshOld(); $('f_machine').onchange=()=>refreshOld();
     if(ctx.pn) $('f_pn').value=ctx.pn;
     if(ctx.machine) $('f_machine').value=ctx.machine;
@@ -1300,6 +1322,14 @@ async function openModal(type,ctx){
     body.innerHTML='<div class="info-block"><div><span>Part</span><b class="mono">'+esc(r.pn)+'</b></div><div><span>Affected</span><b class="mono">'+esc(r.old)+'</b></div><div><span>Replacement</span><b class="mono">'+esc(r.new)+'</b></div><div><span>Machine</span><b>'+esc(r.machine||'—')+'</b></div></div>'
       +'<div class="field"><label>Order / ticket</label><input id="f_order" value="'+esc(r.order||'')+'"></div>'
       +'<div class="field"><label>Status</label><select id="f_status"><option'+(r.status!=='Closed'?' selected':'')+'>Replaced</option><option'+(r.status==='Closed'?' selected':'')+'>Closed</option></select></div>';
+  } else if(type==='moveserial'){
+    const [s,storages]=await Promise.all([getOne('serials',ctx.sn),getAll('storages')]);
+    if(!s||s.status!=='in_stock') return block('This serial is no longer in stock, so it can’t be moved.');
+    const p=await getOne('parts',s.pn);
+    const others=storages.filter(x=>x.name!==s.storage);
+    if(!others.length) return block('Add another storage first — there’s nowhere to move this to.');
+    body.innerHTML='<div class="info-block"><div><span>Part</span><b class="mono">'+esc(s.pn)+'</b> · '+esc(p?p.name:'')+'</div><div><span>Serial</span><b class="mono">'+esc(s.sn)+'</b></div><div><span>From</span><b>'+esc(s.storage)+'</b></div></div>'
+      +'<div class="field"><label>Move to</label><select id="f_dest">'+others.map(x=>'<option value="'+esc(x.name)+'">'+esc(x.name)+'</option>').join('')+'</select></div>';
   } else if(type==='serial'){
     const [s,storages,history]=await Promise.all([getOne('serials',ctx.sn),getAll('storages'),getAll('history')]);
     if(!s) return block('That serial number no longer exists.');
@@ -1344,6 +1374,14 @@ async function checkOldSerial(){
   err.textContent=exists?'This serial number has already been logged in an RMA.':'';
 }
 function clearOldErr(){ const err=$('f_old_err'); if(err) err.textContent=''; }
+async function checkNewSerial(){
+  const err=$('f_new_err'), inp=$('f_new'); if(!err||!inp) return;
+  const val=inp.value.trim();
+  if(!val){ err.textContent=''; return; }
+  const r=await rmaDeclared(val);
+  err.textContent=r?'Already declared as an RMA — this part can’t be provided again.':'';
+}
+function clearNewErr(){ const err=$('f_new_err'); if(err) err.textContent=''; }
 
 /* ---------- form submit ---------- */
 const NOCHANGE={msg:'No changes to save',type:'info'};
@@ -1478,6 +1516,7 @@ async function saveReceive(){
   if(part.type==='serialised'){
     sn=$('f_sn').value.trim();
     if(!sn) throw new Error('Serial number is required.');
+    const declared=await rmaDeclared(sn); if(declared) throw new Error(rmaDeniedMsg(sn,declared));
     if(await snTaken(sn,modalCtx.id||null)) throw new Error('Serial number “'+sn+'” already exists in the system.');
   } else {
     qty=parseInt($('f_qty').value,10);
@@ -1508,6 +1547,7 @@ async function saveUse(){
   if(part.type==='serialised'){
     const sn=$('f_sn').value;
     if(!sn) throw new Error('Choose a serial number.');
+    const declared=await rmaDeclared(sn); if(declared) throw new Error(rmaDeniedMsg(sn,declared));
     const serial=await getOne('serials',sn);
     if(!serial||serial.status!=='in_stock') throw new Error('That serial number isn’t in stock.');
     serial.status='used'; serial.machine=machine; serial.usedDate=now(); pendingRma={pn,machine,old:sn};
@@ -1525,22 +1565,26 @@ async function saveUse(){
   return 'Logged: '+qty+' × '+pn+' → '+machine;
 }
 async function saveRMA(){
-  const pn=$('f_pn').value, machine=$('f_machine').value.trim(), nw=$('f_new').value.trim(), order=$('f_order').value.trim(), doa=$('f_doa').checked;
+  const pn=$('f_pn').value, machine=$('f_machine').value.trim(), nw=$('f_new').value.trim(), order=$('f_order').value.trim();
   const sel=$('f_oldSel').value, old=(sel==='__manual__'?$('f_old').value:sel).trim();
   if(!machine||!old||!nw) throw new Error('Machine, affected serial and replacement serial are required.');
   if(old.toLowerCase()===nw.toLowerCase()) throw new Error('The replacement serial number must be different from the affected one.');
-  if((await getAll('rma')).some(r=>r.old.toLowerCase()===old.toLowerCase())) throw new Error('This serial number has already been logged in an RMA.');
+  if(await rmaDeclared(old)) throw new Error('This serial number has already been logged in an RMA.');
+  const declared=await rmaDeclared(nw);
+  if(declared) throw new Error(rmaDeniedMsg(nw,declared));
   const nSer=await getOne('serials',nw), oSer=await getOne('serials',old), part=await getOne('parts',pn);
-  if(nSer&&nSer.status!=='in_stock') throw new Error('Serial number “'+nw+'” is already used or in an RMA.');
+  if(nSer&&nSer.status!=='in_stock') throw new Error('Serial number “'+nw+'” is already installed'+(nSer.machine?' in '+nSer.machine:'')+', so it can’t be the replacement.');
   if(nSer&&nSer.pn!==pn) throw new Error('“'+nw+'” belongs to a different part ('+nSer.pn+').');
-  const storage=nSer?nSer.storage:(oSer?oSer.storage:''), t=now();
+  const storage=nSer?nSer.storage:(oSer?oSer.storage:''), t=now(), name=part?part.name:'';
   await batch(['serials','rma'],st=>{
-    st.serials.put(Object.assign({sn:old,pn,storage:'',machine,order:'',date:'',note:''},oSer||{},{status:'rma',rma:true,doa:doa||!!(oSer&&oSer.doa)}));
-    st.serials.put(Object.assign({sn:nw,pn,storage,order,date:t,note:'Replacement for '+old},nSer||{},{status:'used',machine,rma:true,usedDate:t}));
+    /* affected part: declared RMA, handed back to the client */
+    st.serials.put(Object.assign({sn:old,pn,storage:'',machine,order:'',date:'',note:''},oSer||{},{status:'rma',rma:true}));
+    /* replacement from storage: installed normally, NOT an RMA */
+    st.serials.put(Object.assign({sn:nw,pn,storage,order,date:t,note:'Replacement for '+old},nSer||{},{status:'used',machine,rma:false,usedDate:t}));
     st.rma.add({pn,order,old,new:nw,status:'Replaced',date:t,ts:Date.now(),machine,newCreated:!nSer});
   });
-  await addHistory({action:'RMA replaced',pn,name:part?part.name:'',sn:old,detail:'Serial '+old+' → '+nw,machine,storage,order});
-  if(doa&&!(oSer&&oSer.doa)) await addHistory({action:'DOA tagged',pn,name:part?part.name:'',sn:old,detail:'Serial '+old+' tagged as dead on arrival (RMA)',machine,storage,order});
+  await addHistory({action:'RMA: part removed',pn,name,sn:old,detail:'Serial '+old+' taken out of '+machine+' — declared RMA, replaced by '+nw,machine,order});
+  await addHistory({action:'Used',pn,name,sn:nw,detail:'Serial '+nw+' installed as replacement for '+old+' (RMA)',machine,storage,order});
   return 'RMA saved: '+old+' → '+nw+' on '+machine;
 }
 async function saveRmaEdit(){
@@ -1581,6 +1625,17 @@ async function saveMoveStock(){
   await addHistory({action:'Stock moved',pn,name:part?part.name:'',detail:qty+' moved '+storage+' → '+dest,storage:dest});
   return 'Moved '+qty+' × '+pn+' to '+dest;
 }
+async function saveMoveSerial(){
+  const s=await getOne('serials',modalCtx.sn);
+  if(!s||s.status!=='in_stock') throw new Error('This serial is no longer in stock.');
+  const dest=$('f_dest').value;
+  if(!dest||dest===s.storage) throw new Error('Choose a different storage to move to.');
+  if(!(await getOne('storages',dest))) throw new Error('That storage no longer exists.');
+  await put('serials',Object.assign({},s,{storage:dest}));
+  const part=await getOne('parts',s.pn);
+  await addHistory({action:'Serial moved',pn:s.pn,name:part?part.name:'',sn:s.sn,detail:'Serial '+s.sn+' moved '+s.storage+' → '+dest,storage:dest,order:s.order||''});
+  return 'Moved serial '+s.sn+' to '+dest;
+}
 async function saveSerial(){
   const s=await getOne('serials',modalCtx.sn);
   if(!s) throw new Error('That serial number no longer exists.');
@@ -1588,6 +1643,7 @@ async function saveSerial(){
   const storage=$('f_storage').value;
   const note=$('f_note').value.trim();
   if(!newSn) throw new Error('Serial number is required.');
+  if(newSn!==s.sn){ const d=await rmaDeclared(newSn); if(d) throw new Error(rmaDeniedMsg(newSn,d)); }
   if(newSn!==s.sn && await snTaken(newSn,null)) throw new Error('Serial number “'+newSn+'” already exists in the system.');
   const detail=diffText([['Serial',s.sn,newSn],['Storage',s.storage,storage],['Note',s.note||'',note]]);
   if(!detail) return NOCHANGE;
@@ -1599,7 +1655,7 @@ async function saveSerial(){
   await addHistory({action:'Serial edited',pn:s.pn,name:part?part.name:'',sn:newSn,detail,storage});
   return 'Updated serial '+newSn;
 }
-const SAVERS={part:savePart,storage:saveStorage,machine:saveMachine,group:saveGroup,receive:saveReceive,use:saveUse,rma:saveRMA,editstock:saveEditStock,movestock:saveMoveStock,serial:saveSerial,rmaedit:saveRmaEdit};
+const SAVERS={part:savePart,storage:saveStorage,machine:saveMachine,group:saveGroup,receive:saveReceive,use:saveUse,rma:saveRMA,editstock:saveEditStock,movestock:saveMoveStock,moveserial:saveMoveSerial,serial:saveSerial,rmaedit:saveRmaEdit};
 
 /* ---------- export / import (CSV) ---------- */
 const CSV_COLS=['record_type','pn','name','type','group','storage','qty','sn','machine','status','order','old','new','date','ts','action','detail','note','doa','rma','used_date','new_created'];
@@ -1704,6 +1760,7 @@ $('importFile').addEventListener('change',async e=>{
     const ok=await confirmDialog({title:'Import this backup?',message:'“'+f.name+'” contains:\n'+lines.join('\n')+'\n\nThis replaces everything currently in Stocktrack. Export a backup first if you want to keep the current data.',confirmLabel:'Replace data',danger:true});
     if(!ok) return;
     await applyBackup(data);
+    await normalizeRmaFlags();
     await addHistory({action:'Data imported',pn:'—',detail:'Restored from "'+f.name+'"'});
     currentStorageView=null; serialExpand={}; machineExpand={}; selectedGroup=ALL; storageDetailMode='serial';
     await renderAll();
@@ -1731,6 +1788,7 @@ const ACTIONS={
   moreSerials:d=>{ serialExpand[d.pn]=(serialExpand[d.pn]||0)+10; return renderStorageDetail(currentStorageView); },
   editStock:d=>openModal('editstock',{pn:d.pn,storage:d.storage}),
   moveStock:d=>openModal('movestock',{pn:d.pn,storage:d.storage}),
+  moveSerial:d=>openModal('moveserial',{sn:d.sn}),
   editSerial:d=>openModal('serial',{sn:d.sn}),
   delSerial:d=>deleteSerial(d.sn),
   snHistory:d=>{
@@ -1798,6 +1856,7 @@ $('scannerOverlay').addEventListener('click',e=>{ if(e.target.id==='scannerOverl
   }
   try{
     db=await openDB();
+    await normalizeRmaFlags();
     await renderAll();
   }catch(err){
     toast('Couldn’t open the local database: '+((err&&err.message)||err),'error');
