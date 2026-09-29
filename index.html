@@ -768,6 +768,10 @@ function updateHeader(){
 }
 function switchView(view,opts){
   opts=opts||{};
+  if(view===activeView()) return;
+  if(!opts.fromHistory){
+    try{ history.pushState({stockView:view},'', '#'+view); }catch(e){}
+  }
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('active',b.dataset.view===view));
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   $('view-'+view).classList.add('active');
@@ -1924,6 +1928,12 @@ $('nav').addEventListener('click',e=>{
   if(!btn) return;
   switchView(btn.dataset.view);
 });
+const initialView=titles[location.hash.slice(1)]?location.hash.slice(1):'dashboard';
+try{ history.replaceState({stockView:initialView},'',location.href); }catch(e){}
+window.addEventListener('popstate',e=>{
+  const view=e.state&&e.state.stockView||location.hash.slice(1);
+  if(titles[view]) switchView(view,{fromHistory:true});
+});
 function setTheme(theme){
   const value=theme==='dark'?'dark':'light';
   document.documentElement.setAttribute('data-theme',value);
@@ -1952,6 +1962,7 @@ $('scannerOverlay').addEventListener('click',e=>{ if(e.target.id==='scannerOverl
     await normalizeRmaFlags();
     await normalizeRmaReplacements();
     await renderAll();
+    if(initialView!==activeView()) switchView(initialView,{fromHistory:true});
   }catch(err){
     toast('Couldn’t open the local database: '+((err&&err.message)||err),'error');
   }
