@@ -130,6 +130,7 @@
   .sub-table{min-width:540px; font-size:12.5px; background:var(--surface)}
   .sub-table th{background:var(--surface)}
   .sub-table tr:hover td{background:var(--hover)}
+  .machine-detail-row:hover td{background:var(--surface)}
 
   .act{display:inline-flex; align-items:center; gap:7px; font-weight:600}
   .act::before{content:''; width:7px; height:7px; background:var(--muted); flex-shrink:0}
@@ -204,10 +205,19 @@
   .tag{display:inline-block;font-size:10.5px;font-weight:700;padding:1px 6px;margin-left:6px;border:1px solid;letter-spacing:.04em;vertical-align:1px}
   .tag-doa{color:var(--doa);border-color:var(--doa);background:color-mix(in srgb,var(--doa) 14%,transparent)}
   .tag-rma{color:var(--rma);border-color:var(--rma);background:color-mix(in srgb,var(--rma) 14%,transparent)}
+  .tag-installed{color:var(--good);border-color:var(--good);background:color-mix(in srgb,var(--good) 14%,transparent)}
+  .part-history-row td{padding:10px;background:var(--surface)}
+  .part-history-table{min-width:0;table-layout:fixed;font-size:12px}
+  .part-history-table th,.part-history-table td{padding:8px 6px;overflow-wrap:anywhere}
+  .part-history-table th:nth-child(1){width:19%}.part-history-table th:nth-child(2){width:20%}.part-history-table th:nth-child(3){width:21%}.part-history-table th:nth-child(4){width:20%}.part-history-table th:nth-child(5){width:20%}
+  .part-history-caption{font-size:12px;color:var(--muted);margin:0 0 8px}
   .readout-num.doa{color:var(--doa)}
   .act-doa::before{background:var(--doa)}
   .clickrow{cursor:pointer}
   .storage-card.hl{border-color:var(--info);box-shadow:0 0 0 2px var(--info)}
+  tr.history-target{outline:2px solid var(--info);outline-offset:-2px}
+  tr.history-clickrow{cursor:pointer}
+  tr.history-clickrow:hover td{background:var(--hover)}
   .mdetail{display:grid;gap:16px}
   .mdetail h3{font-size:12px;font-weight:600;color:var(--muted);margin:0 0 6px}
   .kv{display:flex;gap:26px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
@@ -521,6 +531,21 @@ async function normalizeRmaFlags(){
   if(!fix.length) return;
   await batch(['serials'],st=>{ fix.forEach(s=>st.serials.put(Object.assign({},s,{rma:affected.has(s.sn)}))); });
 }
+async function normalizeRmaReplacements(){
+  const [rmas,serials]=await Promise.all([getAll('rma'),getAll('serials')]);
+  const bySn={}; serials.forEach(s=>{ bySn[s.sn]=s; });
+  const repairs=[];
+  rmas.forEach(r=>{
+    if(!r.new) return;
+    const current=bySn[r.new];
+    if(!current){
+      repairs.push({sn:r.new,pn:r.pn,storage:'',status:'used',machine:r.machine||'',order:r.order||'',date:r.date||'',usedDate:r.date||'',note:'Replacement for '+r.old,rma:false});
+    } else if(current.status!=='used'||current.machine!==r.machine||current.storage){
+      repairs.push(Object.assign({},current,{status:'used',storage:'',machine:r.machine||current.machine||'',order:r.order||current.order||'',usedDate:current.usedDate||r.date||'',rma:false}));
+    }
+  });
+  if(repairs.length) await batch(['serials'],st=>{ repairs.forEach(s=>st.serials.put(s)); });
+}
 function tagsHTML(s){ return (s.doa?'<span class="tag tag-doa">DOA</span>':'')+(s.rma?'<span class="tag tag-rma">RMA</span>':''); }
 let hlNames=new Set(), hlTimer;
 async function goPart(pn){
@@ -549,15 +574,20 @@ function machineEventLabel(h){
   if(/^rma replaced/.test(a)) return 'Replaced';
   return h.sn?'Installed':'Used';
 }
+function machineInstalledCount(inst,hist,parts,machine){
+  const types={}; parts.forEach(p=>{ types[p.pn]=p.type; });
+  return inst.length+hist.filter(h=>h.machine===machine&&/^used/i.test(h.action)&&types[h.pn]==='nonserialised')
+    .reduce((total,h)=>{ const match=/^(\d+)\s+used/i.exec(h.detail||''); return total+(match?+match[1]:1); },0);
+}
 function machineDetail(m,inst,g,parts,hist){
   const nm={}; parts.forEach(p=>{ nm[p.pn]=p.name; });
   const ev=hist.filter(h=>h.machine===m.name&&isMachineEvent(h)).reverse(), mh=ev.slice(0,8);
   const kv=(k,v)=>'<div>'+k+'<b>'+v+'</b></div>';
   const tbl=(h,rows,empty)=>rows.length?'<div class="table-scroll"><table class="sub-table"><thead><tr>'+h+'</tr></thead><tbody>'+rows.join('')+'</tbody></table></div>':'<span class="hint">'+empty+'</span>';
   const inDate=s=>s.usedDate||(hist.filter(h=>h.sn===s.sn&&/^used/i.test(h.action)).pop()||{}).date||'—';
-  return '<div class="mdetail"><div class="kv">'+kv('Group',esc(g||'No group'))+kv('Installed parts',inst.length)+kv('Last activity',esc(ev.length?ev[0].date:'—'))+'</div>'
+  return '<div class="mdetail"><div class="kv">'+kv('Group',esc(g||'No group'))+kv('Installed parts',machineInstalledCount(inst,hist,parts,m.name))+kv('Last activity',esc(ev.length?ev[0].date:'—'))+'</div>'
    +'<div><h3>Installed parts</h3>'+tbl('<th>Part number</th><th>Name</th><th>Serial number</th><th>Installed</th><th>Received order</th>',inst.map(s=>'<tr><td class="mono">'+esc(s.pn)+'</td><td>'+esc(nm[s.pn]||'—')+'</td><td><span class="id-cell mono">'+esc(s.sn)+copyBtn(s.sn)+'</span>'+tagsHTML(s)+'</td><td class="nowrap">'+esc(inDate(s))+'</td><td class="mono">'+esc(s.order||'—')+'</td></tr>'),'No serialised parts installed in this machine yet.')+'</div>'
-   +'<div><h3>Recent activity</h3>'+tbl('<th>Date</th><th>Action</th><th>Part</th><th>Detail</th>',mh.map(h=>{ const lbl=machineEventLabel(h); return '<tr><td class="mono nowrap">'+esc(h.date)+'</td><td><span class="act act-'+(lbl==='Removed'||lbl==='Replaced'?'rma':'used')+'">'+esc(lbl)+'</span></td><td><span class="mono">'+esc(h.pn)+'</span>'+(nm[h.pn]||h.name?' <span class="hint">'+esc(nm[h.pn]||h.name)+'</span>':'')+'</td><td>'+esc(h.detail)+'</td></tr>'; }),'No parts installed, removed or used on this machine yet.')+'</div></div>';
+  +'<div><h3>Recent activity</h3>'+tbl('<th>Date</th><th>Action</th><th>Part</th><th>Detail</th>',mh.map(h=>{ const lbl=machineEventLabel(h); return '<tr class="history-clickrow" data-act="goHistory" '+da({id:h.id})+'><td class="mono nowrap">'+esc(h.date)+'</td><td><span class="act act-'+(lbl==='Removed'||lbl==='Replaced'?'rma':'used')+'">'+esc(lbl)+'</span></td><td><span class="mono">'+esc(h.pn)+'</span>'+(nm[h.pn]||h.name?' <span class="hint">'+esc(nm[h.pn]||h.name)+'</span>':'')+'</td><td>'+esc(h.detail)+'</td></tr>'; }),'No parts installed, removed or used on this machine yet.')+'</div></div>';
 }
 async function deleteRma(id){
   const r=await getOne('rma',id); if(!r) return;
@@ -782,7 +812,7 @@ function rangeStart(r){
   return 0;
 }
 function historyRowHTML(h){
-  return '<tr><td class="mono nowrap">'+esc(h.date)+'</td>'
+  return '<tr'+(h.id?' data-history-id="'+esc(h.id)+'"':'')+'><td class="mono nowrap">'+esc(h.date)+'</td>'
     +'<td>'+(h.order?('<span class="id-cell mono">'+esc(h.order)+copyBtn(h.order)+'</span>'):'—')+'</td>'
     +'<td>'+esc(h.machine||'—')+'</td>'
     +'<td>'+esc(h.name||'—')+'</td>'
@@ -791,6 +821,16 @@ function historyRowHTML(h){
     +'<td>'+esc(h.storage||'—')+'</td>'
     +'<td>'+esc(h.detail)+'</td>'
     +'<td class="nowrap"><span class="act act-'+histCatOf(h)+'">'+esc(h.action)+'</span></td></tr>';
+}
+function showHistoryEntry(id){
+  histCatKey='all'; histRangeKey='all'; $('historySearch').value=''; applyHistoryFilters();
+  switchView('history');
+  while(histShown<histRows.length&&!document.querySelector('[data-history-id="'+CSS.escape(String(id))+'"]')) appendHistoryBatch();
+  const row=document.querySelector('[data-history-id="'+CSS.escape(String(id))+'"]');
+  if(!row) return;
+  row.classList.add('history-target');
+  row.scrollIntoView({block:'center'});
+  setTimeout(()=>row.classList.remove('history-target'),5000);
 }
 async function renderHistory(){
   histAll=(await getAll('history')).reverse();
@@ -896,10 +936,27 @@ async function renderGlobalSearch(){
 }
 
 /* ---------- parts ---------- */
-let partsFilter='all';
+let partsFilter='all', partHistoryOpen=null;
 const PART_CHIPS=[['all','All'],['serialised','Serialised'],['nonserialised','Non-serialised'],['consumable','Consumable'],['doa','DOA'],['rma','RMA']];
+function partHistoryHTML(part,stock,serials,history){
+  const events=history.filter(h=>h.pn===part.pn).sort((a,b)=>histTs(b)-histTs(a));
+  const eventFor=sn=>events.find(h=>h.sn===sn&&/used|rma|doa|arriv|received/i.test(h.action))||{};
+  const tag=(label,installed)=>'<span class="tag '+(installed?'tag-installed':'')+'">'+label+'</span>';
+  const rows=serials.filter(s=>s.pn===part.pn).map(s=>{
+    const ev=eventFor(s.sn), installed=s.status==='used';
+    const label=s.doa?'DOA':s.status==='rma'?'RMA':installed?'Installed':'In stock';
+    const where=s.status==='in_stock'?(s.storage||ev.storage||'—'):(ev.storage||'—');
+    return '<tr><td>'+tag(label,installed)+'</td><td class="mono">'+esc(s.sn)+'</td><td>'+esc(s.machine||ev.machine||'—')+'</td><td>'+esc(s.usedDate||ev.date||s.date||'—')+'</td><td>'+esc(where)+'</td></tr>';
+  });
+  events.filter(h=>/^used/i.test(h.action)&&part.type!=='serialised').forEach(h=>{
+    const installed=part.type==='nonserialised';
+    rows.push('<tr><td>'+tag(installed?'Installed':'Used',installed)+'</td><td>—</td><td>'+esc(h.machine||'—')+'</td><td>'+esc(h.date||'—')+'</td><td>'+esc(h.storage||'—')+'</td></tr>');
+  });
+  stock.filter(s=>s.pn===part.pn&&s.qty>0).forEach(s=>rows.push('<tr><td>'+tag('In stock',false)+'</td><td>—</td><td>—</td><td>—</td><td>'+esc(s.storage)+' ('+esc(s.qty)+')</td></tr>'));
+  return '<tr class="part-history-row"><td colspan="5"><p class="part-history-caption">Part history · '+esc(part.pn)+' · '+esc(part.name)+'</p><div class="table-scroll"><table class="part-history-table"><thead><tr><th>Status</th><th>Serial</th><th>Machine</th><th>When</th><th>Where</th></tr></thead><tbody>'+(rows.length?rows.join(''):emptyRow(5,'No history recorded.'))+'</tbody></table></div></td></tr>';
+}
 async function renderParts(){
-  const [all,stock,serials,rmas]=await Promise.all([getAll('parts'),getAll('stock'),getAll('serials'),getAll('rma')]);
+  const [all,stock,serials,rmas,history]=await Promise.all([getAll('parts'),getAll('stock'),getAll('serials'),getAll('rma'),getAll('history')]);
   const doaN=pn=>serials.filter(s=>s.pn===pn&&s.doa).length, rmaN=pn=>rmas.filter(r=>r.pn===pn).length;
   const q=($('partsSearch').value||'').trim().toLowerCase();
   const base=all.filter(p=>!q||(p.pn+' '+p.name).toLowerCase().includes(q));
@@ -909,8 +966,8 @@ async function renderParts(){
   $('partsBody').innerHTML=parts.map(p=>{
     const total=partStockTotal(p.pn,p,stock,serials);
     return '<tr class="clickrow" data-act="goPart" data-pn="'+esc(p.pn)+'"><td><span class="id-cell mono">'+esc(p.pn)+copyBtn(p.pn)+'</span></td><td>'+esc(p.name)+'</td><td><span class="badge badge-'+p.type+'">'+labelType(p.type)+'</span>'+(doaN(p.pn)?'<span class="tag tag-doa">DOA '+doaN(p.pn)+'</span>':'')+(rmaN(p.pn)?'<span class="tag tag-rma">RMA '+rmaN(p.pn)+'</span>':'')+'</td><td class="mono">'+total+'</td>'
-      +'<td class="actions-cell"><div class="row-actions"><button type="button" class="btn btn-ghost btn-sm" data-act="usePart" '+da({pn:p.pn})+'>Use</button>'
-      +iconBtn('editPart',{pn:p.pn},ICON_EDIT,'Edit part')+iconBtn('delPart',{pn:p.pn},ICON_TRASH,'Delete part',true)+'</div></td></tr>';
+      +'<td class="actions-cell"><div class="row-actions"><button type="button" class="btn btn-ghost btn-sm" data-act="usePart" '+da({pn:p.pn})+'>Use</button>'+iconBtn('partHistory',{pn:p.pn},ICON_HIST,'Part history')
+      +iconBtn('editPart',{pn:p.pn},ICON_EDIT,'Edit part')+iconBtn('delPart',{pn:p.pn},ICON_TRASH,'Delete part',true)+'</div></td></tr>'+(partHistoryOpen===p.pn?partHistoryHTML(p,stock,serials,history):'');
   }).join('')||emptyRow(5,all.length?'No parts match your search or filter.':'No parts yet. Add one to start tracking stock.');
 }
 async function deletePart(pn){
@@ -1151,14 +1208,15 @@ async function renderMachines(){
     const cols=showGroupCol?4:3;
     const rows=list.map(m=>{
       const inst=serials.filter(s=>s.status==='used'&&s.machine===m.name);
+      const installedCount=machineInstalledCount(inst,hist,pts,m.name);
       const open=!!machineExpand[m.name];
       const g=groupOf(m);
       let out='<tr class="serial-summary-row'+(open?' open':'')+'" data-act="toggleMachine" '+da({name:m.name})+'>'
         +'<td class="strong"><span class="id-cell"><span class="chev">'+ICON_CHEV+'</span>'+esc(m.name)+'</span></td>'
         +(showGroupCol?'<td>'+(g?esc(g):'<span class="hint">No group</span>')+'</td>':'')
-        +'<td class="mono">'+inst.length+'</td>'
+        +'<td class="mono">'+installedCount+'</td>'
         +'<td class="actions-cell"><div class="row-actions">'+iconBtn('editMachine',{name:m.name},ICON_EDIT,'Edit machine')+iconBtn('delMachine',{name:m.name},ICON_TRASH,'Delete machine',true)+'</div></td></tr>';
-      if(open) out+='<tr><td colspan="'+cols+'" class="serial-detail">'+machineDetail(m,inst,g,pts,hist)+'</td></tr>';
+      if(open) out+='<tr class="machine-detail-row"><td colspan="'+cols+'" class="serial-detail">'+machineDetail(m,inst,g,pts,hist)+'</td></tr>';
       return out;
     }).join('');
     panel='<div class="panel-head"><h2 class="section-title">'+esc(label)+'<span class="count-pill">'+list.length+'</span></h2></div>'
@@ -1220,8 +1278,8 @@ function focusFirstField(){
 }
 
 /* ---------- modal open/close ---------- */
-const MODAL_TITLES={part:['Add part','Edit part'],storage:['Add storage','Rename storage'],machine:['Add machine','Edit machine'],group:['Add group','Rename group'],receive:['Log incoming part','Edit incoming part'],use:['Use part'],rma:['New RMA'],editstock:['Edit quantity'],movestock:['Move stock'],moveserial:['Move serial'],serial:['Edit serial unit'],rmaedit:['Edit RMA']};
-const MODAL_SUBMIT={part:['Add part','Save changes'],storage:['Add storage','Save changes'],machine:['Add machine','Save changes'],group:['Add group','Save changes'],receive:['Log incoming part','Save changes'],use:['Log usage'],rma:['Save RMA'],editstock:['Save quantity'],movestock:['Move stock'],moveserial:['Move serial'],serial:['Save changes'],rmaedit:['Save changes']};
+const MODAL_TITLES={part:['Add part','Edit part'],partHistory:['Part history'],storage:['Add storage','Rename storage'],machine:['Add machine','Edit machine'],group:['Add group','Rename group'],receive:['Log incoming part','Edit incoming part'],use:['Use part'],rma:['New RMA'],editstock:['Edit quantity'],movestock:['Move stock'],moveserial:['Move serial'],serial:['Edit serial unit'],rmaedit:['Edit RMA']};
+const MODAL_SUBMIT={part:['Add part','Save changes'],partHistory:['Close'],storage:['Add storage','Save changes'],machine:['Add machine','Save changes'],group:['Add group','Save changes'],receive:['Log incoming part','Save changes'],use:['Log usage'],rma:['Save RMA'],editstock:['Save quantity'],movestock:['Move stock'],moveserial:['Move serial'],serial:['Save changes'],rmaedit:['Save changes']};
 
 async function openModal(type,ctx){
   ctx=ctx||{};
@@ -1236,7 +1294,27 @@ async function openModal(type,ctx){
   const show=()=>{ enhanceInputs(body); $('modalOverlay').classList.add('open'); focusFirstField(); };
   const block=msg=>{ body.innerHTML='<p class="hint">'+esc(msg)+'</p>'; $('modalSubmitBtn').style.display='none'; $('modalCancelBtn').textContent='Close'; $('modalOverlay').classList.add('open'); };
 
-  if(type==='machine'){
+  if(type==='partHistory'){
+    const [part,stock,serials,history]=await Promise.all([getOne('parts',ctx.pn),getAll('stock'),getAll('serials'),getAll('history')]);
+    if(!part) return block('This part no longer exists.');
+    const events=history.filter(h=>h.pn===ctx.pn).sort((a,b)=>histTs(b)-histTs(a));
+    const eventFor=sn=>events.find(h=>h.sn===sn&&/used|rma|doa|arriv|received/i.test(h.action))||{};
+    const tag=(label,installed)=>'<span class="tag '+(installed?'tag-installed':'')+'">'+label+'</span>';
+    const rows=serials.filter(s=>s.pn===ctx.pn).map(s=>{
+      const ev=eventFor(s.sn), installed=s.status==='used';
+      const label=s.doa?'DOA':s.status==='rma'?'RMA':installed?'Installed':'In stock';
+      return '<tr><td>'+tag(label,installed)+'</td><td class="mono">'+esc(s.sn)+'</td><td>'+esc(s.machine||ev.machine||'—')+'</td><td class="nowrap">'+esc(s.usedDate||ev.date||s.date||'—')+'</td><td>'+esc(s.storage||ev.storage||'—')+'</td></tr>';
+    });
+    events.filter(h=>/^used/i.test(h.action)&&part.type!=='serialised').forEach(h=>{
+      const installed=part.type==='nonserialised';
+      rows.push('<tr><td>'+tag(installed?'Installed':'Used',installed)+'</td><td>—</td><td>'+esc(h.machine||'—')+'</td><td class="nowrap">'+esc(h.date||'—')+'</td><td>'+esc(h.storage||'—')+'</td></tr>');
+    });
+    stock.filter(s=>s.pn===ctx.pn&&s.qty>0).forEach(s=>rows.push('<tr><td>'+tag('In stock',false)+'</td><td>—</td><td>—</td><td>—</td><td>'+esc(s.storage)+' ('+esc(s.qty)+')</td></tr>'));
+    body.innerHTML='<p class="hint">All recorded units and usage for <b>'+esc(part.pn)+' · '+esc(part.name)+'</b>.</p>'
+      +'<div class="table-scroll"><table class="history-table"><thead><tr><th>Status</th><th>Serial number</th><th>Machine</th><th>When</th><th>Where</th></tr></thead><tbody>'
+      +(rows.length?rows.join(''):emptyRow(5,'No part history yet.'))+'</tbody></table></div>';
+    $('modalSubmitBtn').style.display='none';
+  } else if(type==='machine'){
     const [groups,m]=await Promise.all([getAll('machineGroups'),ctx.name?getOne('machines',ctx.name):Promise.resolve(null)]);
     if(ctx.name&&!m) return block('This machine no longer exists.');
     const cur=m?(m.group||''):(ctx.group||'');
@@ -1272,7 +1350,7 @@ async function openModal(type,ctx){
     if(!parts.length) return block('Add a part first before logging something incoming.');
     if(!storages.length) return block('Add a storage first before logging something incoming.');
     body.innerHTML='<div class="field"><label>Part</label><select id="f_pn" onchange="onReceivePartChange()">'+parts.map(p=>'<option value="'+esc(p.pn)+'" data-type="'+p.type+'"'+(rec&&rec.pn===p.pn?' selected':'')+'>'+esc(p.pn)+' — '+esc(p.name)+'</option>').join('')+'</select></div>'
-      +'<div class="field"><label>Order / ticket</label><input id="f_order" required value="'+esc(rec?rec.order:'')+'"></div>'
+      +'<div class="field"><label>Order / ticket (optional)</label><input id="f_order" value="'+esc(rec?rec.order:'')+'"></div>'
       +'<div class="field"><label>Storage</label><select id="f_storage">'+storages.map(s=>'<option value="'+esc(s.name)+'"'+(rec&&rec.storage===s.name?' selected':'')+'>'+esc(s.name)+'</option>').join('')+'</select></div>'
       +'<div class="field" id="f_qtyWrap"><label>Quantity</label><input id="f_qty" type="number" min="1" value="'+(rec&&rec.qty?rec.qty:1)+'"></div>'
       +'<div class="field" id="f_snWrap" style="display:none"><label>Serial number</label><div class="input-row"><input id="f_sn" value="'+esc(rec&&rec.sn?rec.sn:'')+'">'+scanBtn('f_sn')+'</div></div>'
@@ -1513,7 +1591,6 @@ async function saveReceive(){
   const pn=$('f_pn').value;
   const order=$('f_order').value.trim();
   const storage=$('f_storage').value;
-  if(!order) throw new Error('Order / ticket is required.');
   const part=await getOne('parts',pn);
   if(!part) throw new Error('Choose a part.');
   let qty=null, sn=null;
@@ -1580,7 +1657,7 @@ async function saveRMA(){
   const nSer=await getOne('serials',nw), oSer=await getOne('serials',old), part=await getOne('parts',pn);
   if(nSer&&nSer.status!=='in_stock') throw new Error('Serial number “'+nw+'” is already installed'+(nSer.machine?' in '+nSer.machine:'')+', so it can’t be the replacement.');
   if(nSer&&nSer.pn!==pn) throw new Error('“'+nw+'” belongs to a different part ('+nSer.pn+').');
-  const storage=nSer?nSer.storage:(oSer?oSer.storage:''), t=now(), name=part?part.name:'';
+  const storage=nSer?nSer.storage:'', t=now(), name=part?part.name:'';
   await batch(['serials','rma'],st=>{
     /* affected part: declared RMA, handed back to the client */
     st.serials.put(Object.assign({sn:old,pn,storage:'',machine,order:'',date:'',note:''},oSer||{},{status:'rma',rma:true}));
@@ -1782,6 +1859,7 @@ const ACTIONS={
   editPart:d=>openModal('part',{pn:d.pn}),
   delPart:d=>deletePart(d.pn),
   usePart:d=>openModal('use',{pn:d.pn,storage:d.storage}),
+  partHistory:d=>{ partHistoryOpen=partHistoryOpen===d.pn?null:d.pn; return renderParts(); },
   useSerial:d=>openModal('use',{pn:d.pn,sn:d.sn}),
   addStorage:()=>openModal('storage'),
   editStorage:d=>openModal('storage',{name:d.name}),
@@ -1802,6 +1880,7 @@ const ACTIONS={
     i.dispatchEvent(new Event('input',{bubbles:true}));
     switchView('history');
   },
+  goHistory:d=>showHistoryEntry(d.id),
   addIncoming:()=>openModal('receive'),
   editIncoming:d=>openModal('receive',{id:+d.id}),
   delIncoming:d=>deleteIncoming(+d.id),
@@ -1845,15 +1924,24 @@ $('nav').addEventListener('click',e=>{
   if(!btn) return;
   switchView(btn.dataset.view);
 });
+function setTheme(theme){
+  const value=theme==='dark'?'dark':'light';
+  document.documentElement.setAttribute('data-theme',value);
+  try{ localStorage.setItem('stocktrack-theme',value); }catch(e){}
+}
 $('themeToggle').addEventListener('click',()=>{
   const r=document.documentElement;
-  r.setAttribute('data-theme',r.getAttribute('data-theme')==='dark'?'light':'dark');
+  setTheme(r.getAttribute('data-theme')==='dark'?'light':'dark');
 });
 $('modalOverlay').addEventListener('click',e=>{ if(e.target.id==='modalOverlay') closeModal(); });
 $('scannerOverlay').addEventListener('click',e=>{ if(e.target.id==='scannerOverlay') closeScanner(); });
 
 /* ---------- boot ---------- */
 (async()=>{
+  try{
+    const savedTheme=localStorage.getItem('stocktrack-theme');
+    if(savedTheme==='dark'||savedTheme==='light') setTheme(savedTheme);
+  }catch(e){}
   document.querySelectorAll('.history-table thead').forEach(t=>{ t.innerHTML=HIST_THEAD; });
   enhanceInputs(document);
   if('IntersectionObserver' in window){
@@ -1862,6 +1950,7 @@ $('scannerOverlay').addEventListener('click',e=>{ if(e.target.id==='scannerOverl
   try{
     db=await openDB();
     await normalizeRmaFlags();
+    await normalizeRmaReplacements();
     await renderAll();
   }catch(err){
     toast('Couldn’t open the local database: '+((err&&err.message)||err),'error');
