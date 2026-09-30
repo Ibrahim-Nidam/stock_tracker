@@ -243,6 +243,7 @@
   .info-block{border:1px solid var(--line-soft); background:var(--hover); padding:10px 12px; margin-bottom:14px; font-size:13px; display:grid; gap:5px}
   .info-block span{color:var(--muted); display:inline-block; min-width:78px; font-size:12px}
   .confirm-msg{white-space:pre-line; font-size:13.5px; color:var(--muted); margin:0 0 20px; line-height:1.55}
+  .backup-reminder-msg{font-size:14px; color:var(--muted); margin:0 0 20px; line-height:1.55}
 
   .scanner-overlay{position:fixed; inset:0; background:rgba(10,14,18,.75); display:none; align-items:center; justify-content:center; z-index:60; padding:20px}
   .scanner-overlay.open{display:flex}
@@ -398,6 +399,14 @@
     </div>
   </div>
 
+  <div class="modal-overlay" id="backupReminderOverlay" role="dialog" aria-modal="true" aria-labelledby="backupReminderTitle">
+    <div class="modal-box" style="max-width:440px">
+      <div class="modal-head"><span id="backupReminderTitle">Backup reminder</span><button class="modal-close" type="button" onclick="closeBackupReminder()" aria-label="Close">&times;</button></div>
+      <p class="backup-reminder-msg" id="backupReminderMsg"></p>
+      <div class="modal-actions"><button type="button" class="btn btn-ghost" onclick="closeBackupReminder()">Remind me tomorrow</button><button type="button" class="btn btn-primary" onclick="backupFromReminder()">Export backup</button></div>
+    </div>
+  </div>
+
   <div class="scanner-overlay" id="scannerOverlay">
     <div class="scanner-box">
       <div class="scanner-head"><span>Scan barcode</span><button class="modal-close" type="button" onclick="closeScanner()">&times;</button></div>
@@ -432,6 +441,10 @@ let db, modalType=null, modalCtx={}, currentStorageView=null;
 let storageDetailMode='serial', serialExpand={}, selectedGroup=ALL, machineExpand={};
 let confirmResolve=null, pendingRma=null;
 const $=id=>document.getElementById(id);
+const DEFAULT_MACHINE_GROUPS={
+  'Transit':['K888','K889','K890','K931','K932','K933'],
+  'Terminal 1':['K278','K279','K280','K288','K289','K290']
+};
 
 /* ---------- db ---------- */
 function openDB(){
@@ -461,6 +474,21 @@ function getOne(store,key){ return reqp(tx(store).get(key)); }
 function put(store,val){ return reqp(tx(store,'readwrite').put(val)); }
 function addRec(store,val){ return reqp(tx(store,'readwrite').add(val)); }
 function del(store,key){ return reqp(tx(store,'readwrite').delete(key)); }
+async function seedDefaultMachines(){
+  let seeded=false;
+  try{ seeded=localStorage.getItem('stocktrack-default-machines-seeded')==='1'; }catch(e){}
+  if(seeded) return;
+  const [machines,groups]=await Promise.all([getAll('machines'),getAll('machineGroups')]);
+  const machineNames=new Set(machines.map(m=>m.name));
+  const groupNames=new Set(groups.map(g=>g.name));
+  await batch(['machines','machineGroups'],s=>{
+    Object.entries(DEFAULT_MACHINE_GROUPS).forEach(([group,names])=>{
+      if(!groupNames.has(group)) s.machineGroups.put({name:group});
+      names.forEach(name=>{ if(!machineNames.has(name)) s.machines.put({name,group}); });
+    });
+  });
+  try{ localStorage.setItem('stocktrack-default-machines-seeded','1'); }catch(e){}
+}
 /* run several writes in ONE transaction (all succeed or none do) */
 function batch(names,fn){
   return new Promise((res,rej)=>{
@@ -1766,8 +1794,40 @@ async function exportCSV(){
     a.download='stocktrack-backup-'+new Date().toISOString().slice(0,10)+'.csv';
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+    markBackupTaken();
+    closeBackupReminder();
     toast('Backup exported ('+(rows.length-1)+' records)');
   }catch(err){ toast('Export failed: '+((err&&err.message)||err),'error'); }
+}
+function localDateKey(date=new Date()){
+  return date.getFullYear()+'-'+String(date.getMonth()+1).padStart(2,'0')+'-'+String(date.getDate()).padStart(2,'0');
+}
+function formatBackupDate(value){
+  const date=new Date(value);
+  return isNaN(date.getTime())?'—':String(date.getDate()).padStart(2,'0')+' - '+String(date.getMonth()+1).padStart(2,'0')+' - '+date.getFullYear()+' at '+String(date.getHours()).padStart(2,'0')+':'+String(date.getMinutes()).padStart(2,'0');
+}
+function markBackupTaken(){
+  try{
+    localStorage.setItem('stocktrack-last-backup',new Date().toISOString());
+    localStorage.setItem('stocktrack-backup-reminder-date',localDateKey());
+  }catch(e){}
+}
+function closeBackupReminder(){ $('backupReminderOverlay').classList.remove('open'); }
+function backupFromReminder(){ closeBackupReminder(); exportCSV(); }
+function maybeShowBackupReminder(){
+  let lastBackup='', reminderDate='';
+  try{
+    lastBackup=localStorage.getItem('stocktrack-last-backup')||'';
+    reminderDate=localStorage.getItem('stocktrack-backup-reminder-date')||'';
+  }catch(e){ return; }
+  const today=localDateKey();
+  if(reminderDate===today) return;
+  const message=lastBackup
+    ? 'Please take a backup. Your last export was on '+formatBackupDate(lastBackup)+'.'
+    : 'Please take a backup. You have not exported a backup yet.';
+  $('backupReminderMsg').textContent=message;
+  $('backupReminderOverlay').classList.add('open');
+  try{ localStorage.setItem('stocktrack-backup-reminder-date',today); }catch(e){}
 }
 function parseCSV(text){
   if(text.charCodeAt(0)===0xFEFF) text=text.slice(1);
@@ -1959,10 +2019,12 @@ $('scannerOverlay').addEventListener('click',e=>{ if(e.target.id==='scannerOverl
   }
   try{
     db=await openDB();
+    await seedDefaultMachines();
     await normalizeRmaFlags();
     await normalizeRmaReplacements();
     await renderAll();
     if(initialView!==activeView()) switchView(initialView,{fromHistory:true});
+    maybeShowBackupReminder();
   }catch(err){
     toast('Couldn’t open the local database: '+((err&&err.message)||err),'error');
   }
