@@ -98,6 +98,8 @@
   .select-control{appearance:none; -webkit-appearance:none; border:1px solid var(--line); background-color:var(--surface); color:var(--ink); font:600 13px 'Space Grotesk',sans-serif; min-height:35px; padding:7px 34px 7px 11px; cursor:pointer; background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%); background-position:calc(100% - 16px) 15px,calc(100% - 11px) 15px; background-size:5px 5px,5px 5px; background-repeat:no-repeat}
   .select-control:hover{background-color:var(--hover)}
   .select-control:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+  .part-picker-search{width:100%; margin-bottom:8px}
+  .part-picker-select{width:100%; margin-bottom:12px}
   .toolbar .clearable{flex:1 1 240px; max-width:380px}
   .toolbar.full .clearable{max-width:none}
   .see-more{display:flex; justify-content:center; margin-top:16px}
@@ -560,6 +562,40 @@ function fromCloudRecord(store,record){
   delete out.new_created;
   return out;
 }
+const CLOUD_KEYS={
+  parts:['pn'],storages:['name'],stock:['pn','storage'],serials:['sn'],incoming:['id'],
+  rma:['id'],history:['id'],machines:['name'],machineGroups:['name'],workorders:['wo'],woLines:['id']
+};
+function cloudKeyValue(store,record){
+  return CLOUD_KEYS[store].map(key=>String(record[key]===undefined?'':record[key])).join('\u0001');
+}
+function cloudFilter(key,value){
+  return key+'=eq.'+encodeURIComponent(String(value));
+}
+async function reconcileCloudMissing(){
+  const local=await loadAllData(), added={};
+  STORE_NAMES.forEach(n=>added[n]=[]);
+  cloudApplying=true;
+  try{
+    for(const store of STORE_NAMES){
+      const keys=CLOUD_KEYS[store], select=keys.join(',');
+      const remoteKeys=await cloudRequest(CLOUD_TABLES[store].table+'?select='+select+'&limit=10000')||[];
+      const have=new Set(local[store].map(record=>cloudKeyValue(store,record)));
+      const missing=remoteKeys.filter(record=>!have.has(cloudKeyValue(store,record)));
+      for(const record of missing){
+        const filters=keys.map(key=>cloudFilter(key,record[key])).join('&');
+        const rows=await cloudRequest(CLOUD_TABLES[store].table+'?select=*&'+filters+'&limit=1')||[];
+        if(rows[0]) added[store].push(fromCloudRecord(store,rows[0]));
+      }
+    }
+    const count=STORE_NAMES.reduce((n,store)=>n+added[store].length,0);
+    if(!count) return 0;
+    await batch(STORE_NAMES,s=>{
+      STORE_NAMES.forEach(store=>added[store].forEach(record=>s[store].put(record)));
+    });
+    return count;
+  }finally{ cloudApplying=false; }
+}
 async function syncToSupabase(){
   const btn=$('cloudSyncBtn');
   if(btn) btn.disabled=true;
@@ -607,9 +643,25 @@ async function loadFromSupabase(){
   return true;
 }
 async function loadCloudIfAvailable(){
-  // Supabase is the shared source of truth. IndexedDB is only a local
-  // fallback for first use or while the cloud is unavailable.
-  return loadFromSupabase();
+  // Keep the local cache visible and reconcile only records that are not
+  // present locally. A full download is reserved for first use.
+  const refreshKey='stocktrack-cloud-refresh';
+  try{
+    const last=Number(localStorage.getItem(refreshKey)||0);
+    if(last&&Date.now()-last<300000){ cloudHealthy=true; return false; }
+  }catch(e){}
+  const local=await loadAllData();
+  const hasLocal=STORE_NAMES.some(store=>local[store].length);
+  if(!hasLocal){
+    const loaded=await loadFromSupabase();
+    try{ localStorage.setItem(refreshKey,String(Date.now())); }catch(e){}
+    return loaded;
+  }
+  const added=await reconcileCloudMissing();
+  cloudHealthy=true;
+  try{ localStorage.setItem(refreshKey,String(Date.now())); }catch(e){}
+  if(added) toast('Added '+plural(added,'missing cloud record')+' to this device','info');
+  return added>0;
 }
 async function seedDefaultMachines(){
   let seeded=false;
@@ -1313,9 +1365,9 @@ async function renderIncoming(){
       +incField('Order / ticket','<span class="mono">'+esc(i.order)+'</span>'+copyBtn(i.order))
       +incField(isSerial?'Serial number':'Quantity',isSerial?('<span class="mono">'+esc(i.sn)+'</span>'+copyBtn(i.sn)):esc(plural(i.qty,'unit')))
       +incField('Will be stored in',esc(i.storage))
-      +incField('Logged on',esc(i.date||'—'))
+      +incField('Logged on','<span title="The date this incoming order was recorded in Stocktrack">'+esc(i.date||'—')+'</span>')
       +'</dl>'
-      +'<p class="inc-hint">Arrived? Press <b>Mark as arrived</b> to add it to <b>'+esc(i.storage)+'</b>.</p>'
+      +'<p class="inc-hint">Logged on is when this incoming order was added to Stocktrack. Arrived? Press <b>Mark as arrived</b> to add it to <b>'+esc(i.storage)+'</b>.</p>'
       +'<div class="inc-actions"><button type="button" class="btn btn-primary" data-act="arrive" '+da({id:i.id})+'>Mark as arrived</button>'
       +'<button type="button" class="btn btn-ghost" data-act="editIncoming" '+da({id:i.id})+'>Edit</button>'
       +'<button type="button" class="btn btn-danger-outline" data-act="delIncoming" '+da({id:i.id})+'>Delete</button></div>'
@@ -1525,7 +1577,7 @@ async function openModal(type,ctx){
     if(ctx.id&&(!rec||rec.status!=='Waiting')) return block('This entry has already arrived or no longer exists, so it can’t be edited.');
     if(!parts.length) return block('Add a part first before logging something incoming.');
     if(!storages.length) return block('Add a storage first before logging something incoming.');
-    body.innerHTML='<div class="field"><label>Part</label><select id="f_pn" onchange="onReceivePartChange()">'+parts.map(p=>'<option value="'+esc(p.pn)+'" data-type="'+p.type+'"'+(rec&&rec.pn===p.pn?' selected':'')+'>'+esc(p.pn)+' — '+esc(p.name)+'</option>').join('')+'</select></div>'
+    body.innerHTML='<div class="field"><label for="f_pnSearch">Find a part</label><input id="f_pnSearch" class="part-picker-search" type="search" placeholder="Search by part number or name" oninput="filterReceiveParts()"><label for="f_pn">Part</label><select id="f_pn" class="part-picker-select" onchange="onReceivePartChange()">'+parts.map(p=>'<option value="'+esc(p.pn)+'" data-type="'+p.type+'" data-search="'+esc((p.pn+' '+p.name).toLowerCase())+'"'+(rec&&rec.pn===p.pn?' selected':'')+'>'+esc(p.pn)+' — '+esc(p.name)+'</option>').join('')+'</select><p class="helper-note">Use the search to narrow the list, or choose directly from the select.</p></div>'
       +'<div class="field"><label>Order / ticket (optional)</label><input id="f_order" value="'+esc(rec?rec.order:'')+'"></div>'
       +'<div class="field"><label>Storage</label><select id="f_storage">'+storages.map(s=>'<option value="'+esc(s.name)+'"'+(rec&&rec.storage===s.name?' selected':'')+'>'+esc(s.name)+'</option>').join('')+'</select></div>'
       +'<div class="field" id="f_qtyWrap"><label>Quantity</label><input id="f_qty" type="number" min="1" value="'+(rec&&rec.qty?rec.qty:1)+'"></div>'
@@ -1612,6 +1664,14 @@ async function onReceivePartChange(){
   const t=sel.selectedOptions[0]?sel.selectedOptions[0].dataset.type:'nonserialised';
   $('f_qtyWrap').style.display=t==='serialised'?'none':'block';
   $('f_snWrap').style.display=t==='serialised'?'block':'none';
+}
+function filterReceiveParts(){
+  const search=($('f_pnSearch').value||'').trim().toLowerCase();
+  const sel=$('f_pn');
+  if(!sel) return;
+  Array.from(sel.options).forEach(option=>{
+    option.hidden=!!search && !option.dataset.search.includes(search);
+  });
 }
 async function onUsePartChange(){
   const sel=$('f_pn');
@@ -2436,17 +2496,23 @@ function chooseImportMode(fileName,lines,warnings){
   }
   try{
     db=await openDB();
-    try{
-      if(await loadCloudIfAvailable()) toast('Loaded shared data from Supabase','info');
-    }catch(err){
-      toast('Could not load Supabase data; showing local data instead.','error');
-    }
     await seedDefaultMachines();
     await normalizeRmaFlags();
     await normalizeRmaReplacements();
     await renderAll();
     appReady=true;
-    scheduleCloudSync();
+    // IndexedDB is the fast startup cache. Reconcile in the background so
+    // opening the app never waits for Supabase network requests.
+    setTimeout(async()=>{
+      try{
+        if(await loadCloudIfAvailable()){
+          await renderAll();
+          toast('Loaded shared data from Supabase','info');
+        }
+      }catch(err){
+        toast('Could not refresh shared data; continuing with local data.','error');
+      }
+    },0);
     if(initialView!==activeView()) switchView(initialView,{fromHistory:true});
     maybeShowBackupReminder();
   }catch(err){
