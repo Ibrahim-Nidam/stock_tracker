@@ -481,7 +481,7 @@ const ALL='__all__', NONE='__none__';
 let db, modalType=null, modalCtx={}, currentStorageView=null;
 let storageDetailMode='serial', serialExpand={}, selectedGroup=ALL, machineExpand={};
 let confirmResolve=null, pendingRma=null, cloudSyncTimer=null;
-let cloudApplying=false, appReady=false;
+let cloudApplying=false, appReady=false, cloudHealthy=false;
 const $=id=>document.getElementById(id);
 const DEFAULT_MACHINE_GROUPS={
   'Transit':['K887U','K888U','K889U','K931U','K932U','K933U'],
@@ -517,7 +517,7 @@ function reqp(req){ return new Promise((res,rej)=>{ req.onsuccess=()=>res(req.re
 function getAll(store){ return reqp(tx(store).getAll()); }
 function getOne(store,key){ return reqp(tx(store).get(key)); }
 function scheduleCloudSync(){
-  if(!appReady||cloudApplying) return;
+  if(!appReady||cloudApplying||!cloudHealthy) return;
   clearTimeout(cloudSyncTimer);
   cloudSyncTimer=setTimeout(()=>{ cloudSyncTimer=null; syncToSupabase(); },900);
 }
@@ -581,6 +581,7 @@ async function syncToSupabase(){
       }
     }
     const count=STORE_NAMES.reduce((n,store)=>n+data[store].length,0);
+    cloudHealthy=true;
     toast('Cloud sync complete — '+plural(count,'record')+' uploaded');
   }catch(err){
     toast('Cloud sync failed: '+((err&&err.message)||err),'error');
@@ -592,6 +593,7 @@ async function loadFromSupabase(){
     const rows=await cloudRequest(CLOUD_TABLES[store].table+'?select=*&limit=10000');
     data[store]=(rows||[]).map(record=>fromCloudRecord(store,record));
   }
+  cloudHealthy=true;
   if(!STORE_NAMES.some(n=>data[n].length)) return false;
   cloudApplying=true;
   try{
@@ -604,9 +606,9 @@ async function loadFromSupabase(){
   }finally{ cloudApplying=false; }
   return true;
 }
-async function loadCloudIfLocalEmpty(){
-  const data=await loadAllData();
-  if(STORE_NAMES.some(n=>data[n].length)) return false;
+async function loadCloudIfAvailable(){
+  // Supabase is the shared source of truth. IndexedDB is only a local
+  // fallback for first use or while the cloud is unavailable.
   return loadFromSupabase();
 }
 async function seedDefaultMachines(){
@@ -2435,15 +2437,16 @@ function chooseImportMode(fileName,lines,warnings){
   try{
     db=await openDB();
     try{
-      if(await loadCloudIfLocalEmpty()) toast('Loaded data from Supabase','info');
+      if(await loadCloudIfAvailable()) toast('Loaded shared data from Supabase','info');
     }catch(err){
-      toast('Supabase is not ready. Run supabase-schema.sql, then sync again.','info');
+      toast('Could not load Supabase data; showing local data instead.','error');
     }
     await seedDefaultMachines();
     await normalizeRmaFlags();
     await normalizeRmaReplacements();
     await renderAll();
     appReady=true;
+    scheduleCloudSync();
     if(initialView!==activeView()) switchView(initialView,{fromHistory:true});
     maybeShowBackupReminder();
   }catch(err){
