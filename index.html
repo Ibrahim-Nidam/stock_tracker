@@ -340,6 +340,8 @@
       <header class="pagehead">
         <div><h1 class="page-title" id="pageTitle">Work orders</h1><div class="page-sub" id="pageSub">Repairs, preventive maintenance and part orders per machine</div></div>
         <div class="actions">
+          <button class="btn btn-ghost" type="button" id="reloadBtn" style="display:none" title="The last load from Supabase failed">Retry connection</button>
+          <button class="btn btn-ghost" type="button" id="refreshBtn" title="Reload this screen from Supabase (picks up changes made on other devices)">Refresh data</button>
           <!-- Check data / backup / sync buttons commented out
           <button class="btn btn-ghost" type="button" data-act="checkData">Check data</button>
           <button class="btn btn-ghost" type="button" id="importBtn">Import backup</button>
@@ -483,7 +485,6 @@ const TOAST_ICONS={
 };
 
 /* ---------- state ---------- */
-const DB_NAME='stocktracker', DB_VER=4;
 const SUPABASE_URL='https://zbdfingylmphrorcgfve.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY='sb_publishable_n4yLmRE-o6tbS1uEyOPkfQ_E7kdky2W';
 const CLOUD_TABLES={
@@ -500,10 +501,12 @@ const CLOUD_TABLES={
   woLines:{table:'wo_lines',fields:['id','wo','pn','name','qty','status','sn','note','src']}
 };
 const ALL='__all__', NONE='__none__';
-let db, modalType=null, modalCtx={}, currentStorageView=null;
+let modalType=null, modalCtx={}, currentStorageView=null;
 let storageDetailMode='serial', serialExpand={}, selectedGroup=ALL, machineExpand={};
-let confirmResolve=null, pendingRma=null, cloudSyncTimer=null;
-let cloudApplying=false, appReady=false, cloudHealthy=false;
+let confirmResolve=null, pendingRma=null;
+/* IndexedDB (the old local cache) is no longer used — Supabase is the only database:
+   const DB_NAME='stocktracker', DB_VER=4;
+   let db, cloudSyncTimer=null, cloudApplying=false, appReady=false, cloudHealthy=false; */
 const $=id=>document.getElementById(id);
 const DEFAULT_MACHINE_GROUPS={
   'Transit':['K887U','K888U','K889U','K931U','K932U','K933U'],
@@ -511,7 +514,7 @@ const DEFAULT_MACHINE_GROUPS={
   'MUX':['MUX','MUX V2','MUX CMN']
 };
 
-/* ---------- db ---------- */
+/* ---------- db (IndexedDB layer, commented out) ----------
 function openDB(){
   return new Promise((res,rej)=>{
     const r=indexedDB.open(DB_NAME,DB_VER);
@@ -531,7 +534,7 @@ function openDB(){
       mk('woLines',{keyPath:'id',autoIncrement:true});
     };
     r.onsuccess=e=>res(e.target.result);
-    r.onerror=e=>rej(e.target.error);
+    r.onerror=e=>rej(r.error);
   });
 }
 function tx(store,mode='readonly'){ return db.transaction(store,mode).objectStore(store); }
@@ -546,6 +549,7 @@ function scheduleCloudSync(){
 function put(store,val){ return reqp(tx(store,'readwrite').put(val)).then(result=>{ scheduleCloudSync(); return result; }); }
 function addRec(store,val){ return reqp(tx(store,'readwrite').add(val)).then(result=>{ scheduleCloudSync(); return result; }); }
 function del(store,key){ return reqp(tx(store,'readwrite').delete(key)).then(result=>{ scheduleCloudSync(); return result; }); }
+---------- end of the IndexedDB layer ---------- */
 
 /* ---------- Supabase cloud persistence ---------- */
 function cloudHeaders(extra){
@@ -555,16 +559,34 @@ function cloudHeaders(extra){
     'Content-Type':'application/json'
   },extra||{});
 }
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 async function cloudRequest(path,opts){
-  const r=await fetch(SUPABASE_URL+'/rest/v1/'+path,Object.assign({headers:cloudHeaders()},opts||{}));
-  if(!r.ok){
-    let detail='';
-    try{ detail=await r.text(); }catch(e){}
-    throw new Error('Supabase request failed ('+r.status+')'+(detail?': '+detail.slice(0,220):''));
+  /* every call is retried a couple of times so a single blip does not lose data.
+     Safe because all writes here are idempotent (upserts by key / deletes by key). */
+  opts=opts||{};
+  const attempts=opts.attempts||3;
+  let lastErr=null;
+  for(let attempt=1;attempt<=attempts;attempt++){
+    try{
+      const r=await fetch(SUPABASE_URL+'/rest/v1/'+path,Object.assign({headers:cloudHeaders()},opts));
+      if(!r.ok){
+        let detail='';
+        try{ detail=await r.text(); }catch(e){}
+        const err=new Error('Supabase request failed ('+r.status+')'+(detail?': '+detail.slice(0,220):''));
+        err.status=r.status;
+        throw err;
+      }
+      if(r.status===204) return null;
+      const text=await r.text();
+      return text?JSON.parse(text):null;
+    }catch(err){
+      lastErr=err;
+      /* a permanent rejection (bad key, missing table, constraint) will not fix itself */
+      if(err&&err.status&&err.status<500&&err.status!==408&&err.status!==429) throw err;
+      if(attempt<attempts) await sleep(350*attempt);
+    }
   }
-  if(r.status===204) return null;
-  const text=await r.text();
-  return text?JSON.parse(text):null;
+  throw lastErr;
 }
 function toCloudRecord(store,record){
   const fields=CLOUD_TABLES[store].fields, out={};
@@ -586,12 +608,129 @@ const CLOUD_KEYS={
   parts:['pn'],storages:['name'],stock:['pn','storage'],serials:['sn'],incoming:['id'],
   rma:['id'],history:['id'],machines:['name'],machineGroups:['name'],workorders:['wo'],woLines:['id']
 };
-function cloudKeyValue(store,record){
-  return CLOUD_KEYS[store].map(key=>String(record[key]===undefined?'':record[key])).join('\u0001');
+/* ==================================================================
+   Supabase is now the ONLY database — the IndexedDB cache is gone.
+   Everything is loaded lazily: a table is downloaded the first time
+   something actually needs it and then kept in memory for the rest of
+   the session, so opening a screen costs 1-3 requests instead of
+   re-downloading the whole database (important on the free tier).
+   ================================================================== */
+const MEM={};      /* store -> Map(key -> record) in-memory copy of one table */
+const LOADED={};   /* store -> true once that table has been downloaded */
+const FETCHING={}; /* store -> in-flight download, so two callers share one request */
+const LASTID={};   /* store -> highest numeric id seen, used to mint new ids */
+function keyVals(store,key){
+  const cols=CLOUD_KEYS[store];
+  return cols.length===1?[key]:(Array.isArray(key)?key:[key]);
+}
+function memKey(store,key){
+  const vals=keyVals(store,key);
+  return CLOUD_KEYS[store].map((c,i)=>String(vals[i]==null?'':vals[i])).join('\u0001');
+}
+function recKey(store,rec){
+  return CLOUD_KEYS[store].map(c=>String(rec[c]==null?'':rec[c])).join('\u0001');
 }
 function cloudFilter(key,value){
-  return key+'=eq.'+encodeURIComponent(String(value));
+  return key+'=eq.'+encodeURIComponent(String(value==null?'':value));
 }
+/* a quoted, percent-encoded value for PostgREST's in.() lists */
+function pgVal(v){ return '"'+encodeURIComponent(v==null?'':String(v)).replace(/[!'()*]/g,c=>'%'+c.charCodeAt(0).toString(16).toUpperCase()).replace(/\+/g,'%2B')+'"'; }
+function storeUrl(store){
+  const t=CLOUD_TABLES[store];
+  /* ordered by the primary key so rows arrive in the same order IndexedDB used to give us */
+  return t.table+'?select='+t.fields.join(',')+'&order='+CLOUD_KEYS[store][0]+'.asc&limit=10000';
+}
+async function fetchStore(store){
+  if(LOADED[store]) return;
+  if(FETCHING[store]) return FETCHING[store];
+  FETCHING[store]=(async()=>{
+    const rows=await cloudRequest(storeUrl(store))||[];
+    const map=new Map();
+    let max=0;
+    rows.forEach(row=>{
+      const rec=fromCloudRecord(store,row);
+      map.set(recKey(store,rec),rec);
+      if(typeof rec.id==='number'&&rec.id>max) max=rec.id;
+    });
+    MEM[store]=map;
+    LASTID[store]=max;
+    LOADED[store]=true;
+  })();
+  try{ await FETCHING[store]; }finally{ delete FETCHING[store]; }
+}
+async function getAll(store){ await fetchStore(store); return Array.from(MEM[store].values()); }
+async function getOne(store,key){ await fetchStore(store); return MEM[store].get(memKey(store,key)); }
+/* the id columns used to come from IndexedDB autoIncrement, so ids are minted here.
+   millisecond * 1000 + random keeps them unique across devices and time ordered. */
+function newId(store){
+  let id=Date.now()*1000;
+  if(LASTID[store]&&id<=LASTID[store]) id=LASTID[store]+1;
+  id+=Math.floor(Math.random()*1000);
+  if(!LASTID[store]||id>LASTID[store]) LASTID[store]=id;
+  return id;
+}
+async function upsertRecords(store,records){
+  if(!records.length) return [];
+  await fetchStore(store);
+  const payload=records.map(r=>toCloudRecord(store,r));
+  const res=await cloudRequest(CLOUD_TABLES[store].table,{
+    method:'POST',
+    headers:cloudHeaders({Prefer:'return=representation,resolution=merge-duplicates'}),
+    body:JSON.stringify(payload)
+  });
+  const saved=(res&&res.length?res:payload).map(r=>fromCloudRecord(store,r));
+  saved.forEach(rec=>MEM[store].set(recKey(store,rec),rec));
+  return saved;
+}
+async function put(store,val){
+  /* returns the record's key, like the IndexedDB put() it replaces */
+  const saved=await upsertRecords(store,[val]);
+  const rec=saved.length?saved[0]:val;
+  return CLOUD_KEYS[store].length===1?keyVals(store,rec)[0]:CLOUD_KEYS[store].map(c=>rec[c]);
+}
+async function addRec(store,val){
+  const idCol=CLOUD_KEYS[store][0];
+  let rec=val, tries=0;
+  while(true){
+    try{
+      rec=withId(store,rec);
+      const saved=await upsertRecords(store,[rec]);
+      return saved.length?saved[0][idCol]:rec[idCol];
+    }catch(err){
+      /* an id colliding with another device: mint a fresh one and try again once */
+      tries++;
+      const conflict=err&&(/ \(409\)|\(23505\)/.test(String(err.message)));
+      if(tries>1||!conflict) throw err;
+      rec=Object.assign({},val);
+    }
+  }
+}
+async function deleteRecords(store,keys){
+  if(!keys.length) return;
+  await fetchStore(store);
+  const cols=CLOUD_KEYS[store], table=CLOUD_TABLES[store].table;
+  const minimal=cloudHeaders({'Prefer':'return=minimal'});
+  if(cols.length===1){
+    /* all keys in ONE request */
+    const list=keys.map(k=>pgVal(keyVals(store,k)[0])).join(',');
+    await cloudRequest(table+'?'+cols[0]+'=in.('+list+')',{method:'DELETE',headers:minimal});
+  }else{
+    for(const k of keys){
+      const vals=keyVals(store,k);
+      await cloudRequest(table+'?'+cols.map((c,i)=>cloudFilter(c,vals[i])).join('&'),{method:'DELETE',headers:minimal});
+    }
+  }
+  keys.forEach(k=>MEM[store].delete(memKey(store,k)));
+}
+async function del(store,key){ return deleteRecords(store,[key]); }
+async function clearStore(store){
+  await fetchStore(store);
+  await cloudRequest(CLOUD_TABLES[store].table+'?'+CLOUD_KEYS[store][0]+'=not.is.null',{method:'DELETE',headers:cloudHeaders({'Prefer':'return=minimal'})});
+  MEM[store].clear();
+}
+/* Old sync / reconcile / full-download logic, commented out: Supabase is now the
+   only database and tables are fetched lazily instead of being reconciled against
+   a local cache (that cache was the source of most of the earlier problems).
 async function reconcileCloudMissing(){
   const local=await loadAllData(), added={};
   STORE_NAMES.forEach(n=>added[n]=[]);
@@ -683,6 +822,7 @@ async function loadCloudIfAvailable(){
   if(added) toast('Added '+plural(added,'missing cloud record')+' to this device','info');
   return added>0;
 }
+---------- end of the old sync logic ---------- */
 async function seedDefaultMachines(){
   let seeded=false;
   try{ seeded=localStorage.getItem('stocktrack-default-machines-seeded')==='1'; }catch(e){}
@@ -698,7 +838,66 @@ async function seedDefaultMachines(){
   });
   try{ localStorage.setItem('stocktrack-default-machines-seeded','1'); }catch(e){}
 }
-/* run several writes in ONE transaction (all succeed or none do) */
+/* batch writes: several operations applied together (REST has no transactions,
+   so the runs are applied in order, one request per run of identical operations) */
+function batch(names,fn){
+  const ops=[];
+  const s={};
+  names.forEach(n=>{
+    s[n]={
+      put:rec=>{ ops.push({store:n,op:'put',rec}); },
+      add:rec=>{ ops.push({store:n,op:'add',rec}); },
+      delete:key=>{ ops.push({store:n,op:'del',key}); },
+      clear:()=>{ ops.push({store:n,op:'clear'}); }
+    };
+  });
+  fn(s); /* throws here if the caller is wrong, before anything is sent */
+  return applyOps(ops);
+}
+async function applyOps(ops){
+  /* grouped per table so a whole batch costs one request per table, not one per row */
+  const stores=[];
+  ops.forEach(o=>{ if(stores.indexOf(o.store)<0) stores.push(o.store); });
+  for(const store of stores){
+    let list=ops.filter(o=>o.op!=='clear'&&o.store===store);
+    if(ops.some(o=>o.op==='clear'&&o.store===store)){
+      const idx=ops.findIndex(o=>o.op==='clear'&&o.store===store);
+      list=ops.filter((o,i)=>o.store===store&&i>idx&&o.op!=='clear');
+    }
+    const puts=list.filter(o=>o.op==='put'||o.op==='add');
+    const dels=list.filter(o=>o.op==='del');
+    const putKeys={}; puts.forEach(o=>{ putKeys[memKey(store,o.rec)]=true; });
+    const conflicting=dels.some(o=>putKeys[memKey(store,o.key)]);
+    if(conflicting){
+      /* the same row is deleted and written again: apply strictly in order */
+      for(const o of list){
+        if(o.op==='del') await deleteRecords(store,[o.key]);
+        else await upsertRecords(store,[withId(store,o.rec)]);
+      }
+      continue;
+    }
+    if(puts.length) await upsertRecords(store,puts.map(o=>withId(store,o.rec)));
+    if(dels.length) await deleteRecords(store,dels.map(o=>o.key));
+  }
+}
+function withId(store,rec){
+  /* 'add' used to rely on IndexedDB autoIncrement */
+  const idCol=CLOUD_KEYS[store][0];
+  if(rec[idCol]==null||rec[idCol]===''){ const r=Object.assign({},rec); r[idCol]=newId(store); return r; }
+  return rec;
+}
+/* one-off repairs that used to run on every start; they now run once per device
+   so they never cost requests on a normal start-up */
+async function runOneTimeRepairs(){
+  let done='';
+  try{ done=localStorage.getItem('stocktrack-repairs')||''; }catch(e){}
+  if(done) return;
+  await normalizeRmaFlags();
+  await normalizeRmaReplacements();
+  try{ localStorage.setItem('stocktrack-repairs',String(Date.now())); }catch(e){}
+  await renderAll();
+}
+/* the IndexedDB transaction version, commented out:
 function batch(names,fn){
   return new Promise((res,rej)=>{
     const t=db.transaction(names,'readwrite');
@@ -709,6 +908,7 @@ function batch(names,fn){
     try{ fn(s); }catch(err){ try{ t.abort(); }catch(e){} rej(err); }
   });
 }
+---------- end of the IndexedDB batch ---------- */
 
 /* ---------- small helpers ---------- */
 function now(){ const d=new Date(); return d.toLocaleDateString('en-GB')+' '+d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}); }
@@ -1013,15 +1213,36 @@ function switchView(view,opts){
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('active',b.dataset.view===view));
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   $('view-'+view).classList.add('active');
-  if(view==='storage' && !opts.keep){ currentStorageView=null; serialExpand={}; storageDetailMode='serial'; renderStorageGrid(); }
+  if(view==='storage' && !opts.keep){ currentStorageView=null; serialExpand={}; storageDetailMode='serial'; }
   updateHeader();
-  if(view==='history') fillHistory();
+  /* lazy: the screen you open pulls its own data (already in memory most of the time) */
+  refreshView(view);
   try{ window.scrollTo(0,0); }catch(e){}
 }
 
 /* ---------- render all ---------- */
+/* Only the screen you are looking at is rendered: that keeps the number of
+   Supabase requests down, because each view pulls just the tables it needs
+   (and each table is only ever downloaded once per session). */
+const RENDERERS={
+  parts:()=>renderParts(),
+  storage:()=>renderStorageView(),
+  machines:()=>renderMachines(),
+  workorders:()=>renderWorkOrders(),
+  rma:()=>renderRMA(),
+  history:()=>renderHistory()
+};
+function refreshView(view){
+  const fn=RENDERERS[view];
+  if(!fn) return Promise.resolve(true);
+  return Promise.resolve().then(fn).then(()=>true,err=>{
+    toast('Could not load this page from Supabase: '+((err&&err.message)||err),'error');
+    showReloadBtn();
+    return false;
+  });
+}
 async function renderAll(){
-  await Promise.all([/* renderDashboard() commented out with the dashboard */renderParts(),renderStorageView(),renderRMA(),renderHistory(),renderMachines(),renderWorkOrders()]);
+  await refreshView(activeView());
   updateHeader();
 }
 
@@ -1201,7 +1422,9 @@ function partHistoryHTML(part,stock,serials,history){
   return '<tr class="part-history-row"><td colspan="5"><p class="part-history-caption">Part history · '+esc(part.pn)+' · '+esc(part.name)+'</p><div class="table-scroll"><table class="part-history-table"><thead><tr><th>Status</th><th>Serial</th><th>Machine</th><th>When</th><th>Where</th></tr></thead><tbody>'+(rows.length?rows.join(''):emptyRow(5,'No history recorded.'))+'</tbody></table></div></td></tr>';
 }
 async function renderParts(){
-  const [all,stock,serials,rmas,history]=await Promise.all([getAll('parts'),getAll('stock'),getAll('serials'),getAll('rma'),getAll('history')]);
+  const [all,stock,serials,rmas]=await Promise.all([getAll('parts'),getAll('stock'),getAll('serials'),getAll('rma')]);
+  /* history is only downloaded when a part's history panel is actually open */
+  const history=partHistoryOpen?await getAll('history'):[];
   const doaN=pn=>serials.filter(s=>s.pn===pn&&s.doa).length, rmaN=pn=>rmas.filter(r=>r.pn===pn).length;
   const q=($('partsSearch').value||'').trim().toLowerCase();
   const base=all.filter(p=>!q||(p.pn+' '+p.name).toLowerCase().includes(q));
@@ -2248,6 +2471,27 @@ $('themeToggle').addEventListener('click',()=>{
   const r=document.documentElement;
   setTheme(r.getAttribute('data-theme')==='dark'?'light':'dark');
 });
+/* ---------- loading data (Supabase only, no local cache) ---------- */
+function showReloadBtn(){ const b=$('reloadBtn'); if(b) b.style.display='inline-flex'; }
+function invalidateCache(){ STORE_NAMES.forEach(n=>{ delete LOADED[n]; delete MEM[n]; delete FETCHING[n]; }); }
+async function reloadData(){
+  invalidateCache();
+  const ok=await refreshView(activeView());
+  if(!ok) throw new Error('could not reach Supabase');
+  return ok;
+}
+$('reloadBtn').addEventListener('click',async e=>{
+  const b=e.currentTarget; b.disabled=true;
+  try{ await reloadData(); b.style.display='none'; }
+  catch(err){ toast('Still cannot reach Supabase: '+((err&&err.message)||err),'error'); }
+  finally{ b.disabled=false; }
+});
+$('refreshBtn').addEventListener('click',async e=>{
+  const b=e.currentTarget; b.disabled=true;
+  try{ await reloadData(); toast('Reloaded from Supabase','info'); }
+  catch(err){ toast('Refresh failed: '+((err&&err.message)||err),'error'); }
+  finally{ b.disabled=false; }
+});
 $('modalOverlay').addEventListener('click',e=>{ if(e.target.id==='modalOverlay') closeModal(); });
 $('scannerOverlay').addEventListener('click',e=>{ if(e.target.id==='scannerOverlay') closeScanner(); });
 
@@ -2559,28 +2803,17 @@ function chooseImportMode(fileName,lines,warnings){
     new IntersectionObserver(entries=>{ if(entries.some(en=>en.isIntersecting)) fillHistory(); },{rootMargin:'400px'}).observe($('historySentinel'));
   }
   try{
-    db=await openDB();
+    /* one-off: seeds the default machine groups the very first time this device is used */
     await seedDefaultMachines();
-    await normalizeRmaFlags();
-    await normalizeRmaReplacements();
-    await renderAll();
-    appReady=true;
-    // IndexedDB is the fast startup cache. Reconcile in the background so
-    // opening the app never waits for Supabase network requests.
-    setTimeout(async()=>{
-      try{
-        if(await loadCloudIfAvailable()){
-          await renderAll();
-          toast('Loaded shared data from Supabase','info');
-        }
-      }catch(err){
-        toast('Could not refresh shared data; continuing with local data.','error');
-      }
-    },0);
+    /* only the first screen is loaded now — every other page pulls its own data when opened */
+    const ok=await refreshView(activeView());
+    if(!ok) showReloadBtn();
+    /* repairs that only need to happen once per device, kept off the start-up path */
+    setTimeout(()=>{ runOneTimeRepairs().catch(()=>{}); },0);
     if(initialView!==activeView()) switchView(initialView,{fromHistory:true});
-    /* backup reminder commented out: maybeShowBackupReminder(); */
   }catch(err){
-    toast('Couldn’t open the local database: '+((err&&err.message)||err),'error');
+    toast('Could not load data from Supabase: '+((err&&err.message)||err),'error');
+    showReloadBtn();
   }
   updateHeader();
 })();
