@@ -222,6 +222,13 @@
   .readout-num.doa{color:var(--doa)}
   .act-doa::before{background:var(--doa)}
   .clickrow{cursor:pointer}
+  /* work order row expands inline on desktop */
+  .wo-expand-row td{padding:0; background:var(--surface); border-bottom:1px solid var(--line)}
+  tr.wo-expand-row:hover td{background:var(--surface)}
+  .wo-expand-inner{padding:16px 18px 20px}
+  .wo-expand-inner .info-block{margin-bottom:12px}
+  .wo-expand-inner .history-table{min-width:640px}
+  .wo-expand-inner .toolbar{margin:6px 0 8px}
   .storage-card.hl{border-color:var(--info);box-shadow:0 0 0 2px var(--info)}
   tr.history-target{outline:2px solid var(--info);outline-offset:-2px}
   tr.history-clickrow{cursor:pointer}
@@ -315,11 +322,13 @@
     <aside class="sidebar">
       <div class="brand"><span class="brand-mark">Stocktrack</span><span class="brand-sub">Parts, storage &amp; RMA</span></div>
       <nav id="nav">
-        <button class="nav-btn active" data-view="dashboard"><span class="nav-icon"><svg viewBox="0 0 18 18" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="6" height="6"></rect><rect x="10" y="2" width="6" height="6"></rect><rect x="2" y="10" width="6" height="6"></rect><rect x="10" y="10" width="6" height="6"></rect></svg></span><span>Dashboard</span></button>
+        <!-- Dashboard commented out — work orders is the main page now
+        <button class="nav-btn" data-view="dashboard"><span class="nav-icon"><svg viewBox="0 0 18 18" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="6" height="6"></rect><rect x="10" y="2" width="6" height="6"></rect><rect x="2" y="10" width="6" height="6"></rect><rect x="10" y="10" width="6" height="6"></rect></svg></span><span>Dashboard</span></button>
+        -->
+        <button class="nav-btn active" data-view="workorders"><span class="nav-icon"><svg viewBox="0 0 18 18" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="3" y="2.5" width="12" height="13" rx="1"></rect><path d="M6 6.5h6M6 9.5h6M6 12.5h3.5" stroke-linecap="round"></path></svg></span><span>Work orders</span></button>
         <button class="nav-btn" data-view="parts"><span class="nav-icon"><svg viewBox="0 0 18 18" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M9 2 2 5.5v7L9 16l7-3.5v-7L9 2Z"></path><path d="M2 5.5 9 9l7-3.5M9 9v7"></path></svg></span><span>Parts</span></button>
-        <button class="nav-btn" data-view="storage"><span class="nav-icon"><svg viewBox="0 0 18 18" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="14" height="4"></rect><rect x="2" y="7.5" width="14" height="4"></rect><rect x="2" y="13" width="14" height="3"></rect></svg></span><span>Storage</span></button>
+        <button class="nav-btn" data-view="storage"><span class="nav-icon"><svg viewBox="0 0 18 18" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="14" height="4"></rect><rect x="2" y="7.5" width="14" height="4"></rect><rect x="2" y="13" width="14" height="3"></rect></svg></span><span>Stock</span></button>
         <button class="nav-btn" data-view="machines"><span class="nav-icon"><svg viewBox="0 0 18 18" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="14" height="12" rx="1"></rect><circle cx="6" cy="8" r="1.1" fill="currentColor" stroke="none"></circle><circle cx="6" cy="11.5" r="1.1" fill="currentColor" stroke="none"></circle><line x1="9.5" y1="8" x2="13.5" y2="8"></line><line x1="9.5" y1="11.5" x2="13.5" y2="11.5"></line></svg></span><span>Machines</span></button>
-        <button class="nav-btn" data-view="workorders"><span class="nav-icon"><svg viewBox="0 0 18 18" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="3" y="2.5" width="12" height="13" rx="1"></rect><path d="M6 6.5h6M6 9.5h6M6 12.5h3.5" stroke-linecap="round"></path></svg></span><span>Work orders</span></button>
         <button class="nav-btn" data-view="rma"><span class="nav-icon"><svg viewBox="0 0 18 18" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 8a6 6 0 0 1 10.5-3.8M15 8a6 6 0 0 1-10.5 3.8"></path><path d="M13.5 1.8v2.4H11M4.5 16.2v-2.4H7"></path></svg></span><span>RMA</span></button>
         <button class="nav-btn" data-view="history"><span class="nav-icon"><svg viewBox="0 0 18 18" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="9" cy="9" r="7"></circle><path d="M9 5v4l3 2" stroke-linecap="round"></path></svg></span><span>History</span></button>
       </nav>
@@ -329,19 +338,24 @@
 
     <div class="main">
       <header class="pagehead">
-        <div><h1 class="page-title" id="pageTitle">Dashboard</h1><div class="page-sub" id="pageSub">Overview of parts, stock and open items</div></div>
+        <div><h1 class="page-title" id="pageTitle">Work orders</h1><div class="page-sub" id="pageSub">Repairs, preventive maintenance and part orders per machine</div></div>
         <div class="actions">
+          <!-- Check data / backup / sync buttons commented out
           <button class="btn btn-ghost" type="button" data-act="checkData">Check data</button>
           <button class="btn btn-ghost" type="button" id="importBtn">Import backup</button>
           <button class="btn btn-ghost" type="button" id="cloudSyncBtn" title="Data syncs automatically after changes">Sync now</button>
           <button class="btn btn-ghost" type="button" onclick="exportCSV()">Export backup</button>
+          -->
           <button class="btn btn-primary" type="button" id="headerAddPart" style="display:none" data-act="addPart">+ Add part</button>
         </div>
+        <!-- import file input commented out with the import logic
         <input type="file" id="importFile" accept=".csv,text/csv" hidden>
+        -->
       </header>
 
       <div class="content">
-        <section class="view active" id="view-dashboard">
+        <!-- Dashboard view commented out
+        <section class="view" id="view-dashboard">
           <div class="toolbar full" style="margin-bottom:22px">
             <input class="search-input" id="globalSearch" placeholder="Search parts, serials, storages, machines, orders…" oninput="renderGlobalSearch()">
           </div>
@@ -361,6 +375,7 @@
             <div class="see-more" id="dashSeeMore"><button class="btn btn-ghost" type="button" data-act="seeHistory">See more</button></div>
           </div>
         </section>
+        -->
 
         <section class="view" id="view-parts">
           <div class="toolbar"><input class="search-input" id="partsSearch" placeholder="Search part number or name…" oninput="renderParts()"></div>
@@ -377,9 +392,10 @@
           <div id="machinesContent"></div>
         </section>
 
-        <section class="view" id="view-workorders">
+        <section class="view active" id="view-workorders">
           <div class="toolbar"><input class="search-input" id="woSearch" placeholder="Search work order, machine, part number, serial, order…" oninput="renderWorkOrders()"><select class="select-control" id="woMachine" onchange="woMachineFilter=this.value;renderWorkOrders()" style="max-width:190px"></select><button class="btn btn-primary" type="button" data-act="addWo">+ New work order</button></div>
           <div class="filter-row" id="woChips"></div>
+          <div class="filter-row" id="woRangeChips" style="margin-bottom:16px"></div>
           <div class="table-scroll"><table><thead><tr><th>Work order</th><th>Machine</th><th>Type</th><th>Status</th><th>Opened</th><th>Closed</th><th>Order / PO</th><th>Lines</th><th></th></tr></thead><tbody id="woBody"></tbody></table></div>
         </section>
 
@@ -418,6 +434,7 @@
     </div>
   </div>
 
+  <!-- Backup reminder commented out
   <div class="modal-overlay" id="backupReminderOverlay" role="dialog" aria-modal="true" aria-labelledby="backupReminderTitle">
     <div class="modal-box" style="max-width:440px">
       <div class="modal-head"><span id="backupReminderTitle">Backup reminder</span><button class="modal-close" type="button" onclick="closeBackupReminder()" aria-label="Close">&times;</button></div>
@@ -425,6 +442,7 @@
       <div class="modal-actions"><button type="button" class="btn btn-ghost" onclick="closeBackupReminder()">Remind me tomorrow</button><button type="button" class="btn btn-primary" onclick="backupFromReminder()">Export backup</button></div>
     </div>
   </div>
+  -->
 
   <div class="scanner-overlay" id="scannerOverlay">
     <div class="scanner-box">
@@ -434,6 +452,7 @@
     </div>
   </div>
 
+  <!-- Import flow commented out together with the import logic below
   <div class="modal-overlay" id="importModeOverlay" role="dialog" aria-modal="true">
     <div class="modal-box" style="max-width:460px">
       <div class="modal-head"><span>Import this file?</span></div>
@@ -442,6 +461,7 @@
       <div class="modal-actions"><button type="button" class="btn btn-ghost" id="importModeCancel">Cancel</button><button type="button" class="btn btn-ghost" id="importModeReplace">Replace all</button><button type="button" class="btn btn-primary" id="importModeMerge">Merge</button></div>
     </div>
   </div>
+  -->
 
   <div class="toast-stack" id="toastStack" aria-live="polite"></div>
 
@@ -967,19 +987,19 @@ function applyScanResult(text){
 
 /* ---------- header / nav ---------- */
 const titles={
-  dashboard:['Dashboard','Overview of parts, stock and open items'],
-  parts:['Parts','Catalog of every part definition'],
-  storage:['Storage','Where every part physically lives'],
-  machines:['Machines','Equipment that parts get installed into'],
+  // dashboard:['Dashboard','Overview of parts, stock and open items'],
   workorders:['Work orders','Repairs, preventive maintenance and part orders per machine'],
+  parts:['Parts','Catalog of every part definition'],
+  storage:['Stock','Where every part physically lives'],
+  machines:['Machines','Equipment that parts get installed into'],
   rma:['RMA','Serialised replacements and affected units'],
   history:['History','Complete audit trail of every stock change']
 };
-function activeView(){ const v=document.querySelector('.view.active'); return v?v.id.slice(5):'dashboard'; }
+function activeView(){ const v=document.querySelector('.view.active'); return v?v.id.slice(5):'workorders'; }
 function updateHeader(){
   const v=activeView();
   let t=titles[v][0], s=titles[v][1];
-  if(v==='storage' && currentStorageView!==null){ t='Storage — '+currentStorageView; s='Parts currently held at this location'; }
+  if(v==='storage' && currentStorageView!==null){ t='Stock — '+currentStorageView; s='Parts currently held at this location'; }
   $('pageTitle').textContent=t;
   $('pageSub').textContent=s;
   $('headerAddPart').style.display=v==='parts'?'inline-flex':'none';
@@ -1001,7 +1021,7 @@ function switchView(view,opts){
 
 /* ---------- render all ---------- */
 async function renderAll(){
-  await Promise.all([renderDashboard(),renderParts(),renderStorageView(),renderRMA(),renderHistory(),renderMachines(),renderWorkOrders()]);
+  await Promise.all([/* renderDashboard() commented out with the dashboard */renderParts(),renderStorageView(),renderRMA(),renderHistory(),renderMachines(),renderWorkOrders()]);
   updateHeader();
 }
 
@@ -1098,7 +1118,7 @@ function fillHistory(){
   while(histShown<histRows.length && s.getBoundingClientRect().top<window.innerHeight+400 && guard++<60) appendHistoryBatch();
 }
 
-/* ---------- dashboard ---------- */
+/* ---------- dashboard + global search (commented out with the dashboard view) ----------
 async function renderDashboard(){
   const [parts,stock,serials,incoming,rma,history,wos]=await Promise.all([getAll('parts'),getAll('stock'),getAll('serials'),getAll('incoming'),getAll('rma'),getAll('history'),getAll('workorders')]);
   const actWo=wos.filter(woIsOpen).length; $('statWo').textContent=actWo; $('statWo').className='readout-num'+(actWo>0?' accent':'');
@@ -1118,7 +1138,7 @@ async function renderDashboard(){
   await renderGlobalSearch();
 }
 
-/* ---- global search ---- */
+---- global search ----
 function searchResultRow(groupLabel,idx,title,sub){
   return '<div class="list-item" style="cursor:pointer;border-left-color:var(--line)" data-group="'+esc(groupLabel)+'" data-idx="'+idx+'"><span class="li-name" style="font-weight:600;color:var(--ink);min-width:180px">'+esc(title)+'</span><span class="li-name">'+esc(sub)+'</span></div>';
 }
@@ -1158,6 +1178,7 @@ async function renderGlobalSearch(){
     });
   });
 }
+---------- end dashboard + global search ---------- */
 
 /* ---------- parts ---------- */
 let partsFilter='all', partHistoryOpen=null;
@@ -1298,7 +1319,7 @@ async function renderStorageDetail(name){
   const otherTable='<div class="table-scroll"><table><thead><tr><th>Part number</th><th>Name</th><th>Type</th><th>Quantity</th><th></th></tr></thead><tbody>'+(otherRows||emptyRow(5,'Nothing held here right now.'))+'</tbody></table></div>';
 
   $('storageContent').innerHTML=
-    '<div class="detail-bar"><button type="button" class="back-link" data-act="backStorages">'+ICON_BACK+'<span>All storages</span></button>'+toggleHTML+'</div>'
+    '<div class="detail-bar"><button type="button" class="back-link" data-act="backStorages">'+ICON_BACK+'<span>All stock</span></button>'+toggleHTML+'</div>'
     +(storageDetailMode==='serial'?serialTable:otherTable);
   updateHeader();
 }
@@ -1981,6 +2002,7 @@ const SAVERS={part:savePart,storage:saveStorage,machine:saveMachine,group:saveGr
 /* ---------- export / import (CSV) ---------- */
 const CSV_COLS=['record_type','pn','name','type','group','storage','qty','sn','machine','status','order','old','new','date','ts','action','detail','note','doa','rma','used_date','new_created','min','wo','po','opened','closed','wotype','line_status','src'];
 function csvEscape(v){ v=(v===null||v===undefined?'':v).toString(); return /[",\r\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; }
+/* Export backup + backup reminder logic commented out (buttons removed from the header)
 async function exportCSV(){
   try{
     const d=await loadAllData();
@@ -2135,6 +2157,7 @@ $('importFile').addEventListener('change',async e=>{
   }catch(err){ toast('Import failed: '+((err&&err.message)||err),'error'); }
 });
 $('cloudSyncBtn').addEventListener('click',syncToSupabase);
+---------- end export / import / backup reminder / sync-now ---------- */
 
 /* ---------- click / key delegation ---------- */
 const ACTIONS={
@@ -2210,7 +2233,7 @@ $('nav').addEventListener('click',e=>{
   if(!btn) return;
   switchView(btn.dataset.view);
 });
-const initialView=titles[location.hash.slice(1)]?location.hash.slice(1):'dashboard';
+const initialView=titles[location.hash.slice(1)]?location.hash.slice(1):'workorders';
 try{ history.replaceState({stockView:initialView},'',location.href); }catch(e){}
 window.addEventListener('popstate',e=>{
   const view=e.state&&e.state.stockView||location.hash.slice(1);
@@ -2235,7 +2258,20 @@ const STORE_NAMES=['parts','storages','stock','serials','incoming','rma','histor
 const WO_STATUSES=['Open','In progress','Waiting parts','Stopped','Complete','Cancelled','Unknown'];
 const WO_TYPES=['Corrective','Preventive','Other'];
 const LINE_STATUSES=['Listed','Needed','Ordered','Awaiting part','Received','Consumed','Replaced','Defect returned'];
-let woFilter='active', woMachineFilter='';
+let woFilter='active', woMachineFilter='', woRangeKey='all', woExpandedWO=null;
+const WO_RANGES=[['all','Any time'],['today','Today'],['7d','Last 7 days'],['30d','Last 30 days'],['90d','Last 90 days'],['year','This year']];
+/* on desktop the work order details open inline under the row, on smaller screens in a modal */
+function woDetailIsInline(){ try{ return window.matchMedia('(min-width:821px)').matches; }catch(e){ return window.innerWidth>820; } }
+function woTs(w){ const t=Date.parse(w.opened||w.closed||''); return isNaN(t)?0:t; }
+function woRangeMatch(w,key){
+  if(key==='all') return true;
+  const ts=woTs(w);
+  if(!ts) return false;
+  if(key==='today'){ const d=new Date(); d.setHours(0,0,0,0); return ts>=d.getTime(); }
+  if(key==='year') return new Date(ts).getFullYear()===new Date().getFullYear();
+  const days=parseInt(key,10);
+  return !isNaN(days)&&ts>=Date.now()-days*864e5;
+}
 const woIsOpen=w=>['Complete','Cancelled','Unknown'].indexOf(w.status)<0;
 function fmtD(iso){ const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(iso||''); return m?m[3]+'/'+m[2]+'/'+m[1]:(iso||'—'); }
 function woTag(st){ const cls={Complete:'tag-installed','Waiting parts':'tag-warn',Stopped:'tag-rma','In progress':'tag-info',Open:'tag-info'}[st]||''; return '<span class="tag '+cls+'" style="margin-left:0">'+esc(st||'—')+'</span>'; }
@@ -2246,6 +2282,22 @@ async function infoDialog(title,message){
 }
 
 /* ---------- work orders view ---------- */
+/* the work order details (info, part lines, usage) — used inline on desktop and in the modal on small screens */
+async function woDetailHTML(wo){
+  const [w,lines,hist]=await Promise.all([getOne('workorders',wo),getAll('woLines'),getAll('history')]);
+  if(!w) return '<p class="hint">This work order no longer exists.</p>';
+  const ls=lines.filter(l=>l.wo===w.wo).sort((a,b)=>a.id-b.id);
+  const used=hist.filter(h=>h.order===w.wo&&/^used|^rma/i.test(h.action||''));
+  const kv=(k,v)=>'<div><span>'+k+'</span><b>'+v+'</b></div>';
+  return '<div class="info-block">'+kv('Machine',esc(w.machine||'—'))+kv('Type',esc(w.type||'—'))+kv('Status',woTag(w.status))+kv('Opened',esc(fmtD(w.opened)))+kv('Closed',esc(fmtD(w.closed)))+kv('Order / PO / RMA',esc(w.po||'—'))+'</div>'
+    +(w.note?'<p class="helper-note" style="margin:0 0 12px"><b>Note:</b> '+esc(w.note)+'</p>':'')
+    +'<div class="toolbar" style="margin:6px 0 8px"><h3 class="section-title" style="margin:0;font-size:14px">Parts on this work order</h3><button type="button" class="btn btn-ghost btn-sm" data-act="woAddLine" data-wo="'+esc(w.wo)+'">+ Add line</button></div>'
+    +'<div class="table-scroll"><table class="history-table"><thead><tr><th>Part</th><th>Name</th><th>Qty</th><th>Status</th><th>Serials / note</th><th></th></tr></thead><tbody>'
+    +(ls.length?ls.map(l=>'<tr><td class="mono">'+esc(l.pn)+'</td><td>'+esc(l.name||'')+'</td><td class="mono">'+esc(l.qty==null?'—':l.qty)+'</td><td>'+esc(l.status||'—')+'</td><td>'+esc([l.sn,l.note].filter(Boolean).join(' · ')||'—')+'</td><td class="actions-cell"><div class="row-actions">'+iconBtn('woEditLine',{id:l.id},ICON_EDIT,'Edit line')+iconBtn('woDelLine',{id:l.id},ICON_TRASH,'Delete line',true)+'</div></td></tr>').join(''):emptyRow(6,'No parts on this work order yet.'))
+    +'</tbody></table></div>'
+    +(used.length?'<p class="helper-note" style="margin-top:12px">Usage logged against this work order: '+used.map(h=>esc(h.pn)+' ('+esc(h.date)+')').join(', ')+'</p>':'')
+    +(w.src?'<p class="helper-note" style="margin-top:12px">Imported from: '+esc(w.src)+'</p>':'');
+}
 async function renderWorkOrders(){
   const [wos,lines,machines]=await Promise.all([getAll('workorders'),getAll('woLines'),getAll('machines')]);
   const q=($('woSearch').value||'').trim().toLowerCase();
@@ -2257,10 +2309,23 @@ async function renderWorkOrders(){
   const chips=[['all','All'],['active','Active']].concat(WO_STATUSES.map(s=>[s,s]));
   const ok=(w,k)=>k==='all'||(k==='active'?woIsOpen(w):w.status===k);
   $('woChips').innerHTML=chips.map(c=>'<button type="button" class="fchip'+(woFilter===c[0]?' active':'')+'" data-act="woFilter" data-key="'+esc(c[0])+'">'+esc(c[1])+'<span class="n">'+base.filter(w=>ok(w,c[0])).length+'</span></button>').join('');
-  const rows=base.filter(w=>ok(w,woFilter)).sort((a,b)=>(b.opened||'').localeCompare(a.opened||'')||b.wo.localeCompare(a.wo));
-  $('woBody').innerHTML=rows.map(w=>'<tr class="clickrow" data-act="woOpen" data-wo="'+esc(w.wo)+'"><td><span class="id-cell mono">'+esc(w.wo)+copyBtn(w.wo)+'</span></td><td>'+esc(w.machine||'—')+'</td><td>'+esc(w.type||'—')+'</td><td>'+woTag(w.status)+'</td><td class="nowrap">'+esc(fmtD(w.opened))+'</td><td class="nowrap">'+esc(fmtD(w.closed))+'</td><td class="mono">'+esc(w.po||'—')+'</td><td class="mono">'+(cnt[w.wo]||0)+'</td>'
-    +'<td class="actions-cell"><div class="row-actions">'+iconBtn('woEdit',{wo:w.wo},ICON_EDIT,'Edit work order')+iconBtn('woDel',{wo:w.wo},ICON_TRASH,'Delete work order',true)+'</div></td></tr>').join('')
+  $('woRangeChips').innerHTML='<span class="filter-label">When</span>'+WO_RANGES.map(c=>'<button type="button" class="fchip'+(woRangeKey===c[0]?' active':'')+'" data-act="woRange" data-key="'+esc(c[0])+'">'+esc(c[1])+'<span class="n">'+base.filter(w=>ok(w,woFilter)&&woRangeMatch(w,c[0])).length+'</span></button>').join('');
+  const rows=base.filter(w=>ok(w,woFilter)&&woRangeMatch(w,woRangeKey)).sort((a,b)=>(b.opened||'').localeCompare(a.opened||'')||b.wo.localeCompare(a.wo));
+  if(woExpandedWO&&!rows.some(w=>w.wo===woExpandedWO)) woExpandedWO=null;
+  const html=await Promise.all(rows.map(async w=>{
+    const open=woExpandedWO===w.wo;
+    let out='<tr class="clickrow'+(open?' open':'')+'" data-act="woOpen" data-wo="'+esc(w.wo)+'" aria-expanded="'+open+'"><td><span class="id-cell mono"><span class="chev">'+ICON_CHEV+'</span>'+esc(w.wo)+copyBtn(w.wo)+'</span></td><td>'+esc(w.machine||'—')+'</td><td>'+esc(w.type||'—')+'</td><td>'+woTag(w.status)+'</td><td class="nowrap">'+esc(fmtD(w.opened))+'</td><td class="nowrap">'+esc(fmtD(w.closed))+'</td><td class="mono">'+esc(w.po||'—')+'</td><td class="mono">'+(cnt[w.wo]||0)+'</td>'
+      +'<td class="actions-cell"><div class="row-actions">'+iconBtn('woEdit',{wo:w.wo},ICON_EDIT,'Edit work order')+iconBtn('woDel',{wo:w.wo},ICON_TRASH,'Delete work order',true)+'</div></td></tr>';
+    if(open) out+='<tr class="wo-expand-row"><td colspan="9"><div class="wo-expand-inner">'+await woDetailHTML(w.wo)+'</div></td></tr>';
+    return out;
+  }));
+  $('woBody').innerHTML=html.join('')
     ||emptyRow(9,wos.length?'No work orders match your search or filter.':'No work orders yet. Add one to start tracking repairs and maintenance.');
+}
+/* refresh the open inline details after a change (falls back to the modal on small screens) */
+async function refreshWoDetail(wo){
+  if(wo&&woExpandedWO===wo&&woDetailIsInline()) await renderWorkOrders();
+  else if(wo) await openModal('wodetail',{wo});
 }
 
 /* ---------- work order modals (wrapped around the existing openModal) ---------- */
@@ -2300,21 +2365,12 @@ openModal=async function(type,ctx){
       +'<div class="field"><label>Serial numbers (new / defect)</label><input id="f_sn" value="'+esc(l?l.sn||'':'')+'" placeholder="e.g. new 44800-4N / defect 14715-3P"></div>'
       +'<div class="field"><label>Note</label><input id="f_note" value="'+esc(l?l.note||'':'')+'"></div>';
   } else {
-    const [w,lines,hist]=await Promise.all([getOne('workorders',ctx.wo),getAll('woLines'),getAll('history')]);
+    /* small screens only — on desktop the details open inline under the row */
+    const w=await getOne('workorders',ctx.wo);
     if(!w) return block('This work order no longer exists.');
     $('modalTitle').textContent='Work order '+w.wo;
     $('modalSubmitBtn').style.display='none'; $('modalCancelBtn').textContent='Close';
-    const ls=lines.filter(l=>l.wo===w.wo).sort((a,b)=>a.id-b.id);
-    const used=hist.filter(h=>h.order===w.wo&&/^used|^rma/i.test(h.action||''));
-    const kv=(k,v)=>'<div><span>'+k+'</span><b>'+v+'</b></div>';
-    body.innerHTML='<div class="info-block">'+kv('Machine',esc(w.machine||'—'))+kv('Type',esc(w.type||'—'))+kv('Status',woTag(w.status))+kv('Opened',esc(fmtD(w.opened)))+kv('Closed',esc(fmtD(w.closed)))+kv('Order / PO / RMA',esc(w.po||'—'))+'</div>'
-      +(w.note?'<p class="helper-note" style="margin:0 0 12px"><b>Note:</b> '+esc(w.note)+'</p>':'')
-      +'<div class="toolbar" style="margin:6px 0 8px"><h3 class="section-title" style="margin:0;font-size:14px">Parts on this work order</h3><button type="button" class="btn btn-ghost btn-sm" data-act="woAddLine" data-wo="'+esc(w.wo)+'">+ Add line</button></div>'
-      +'<div class="table-scroll"><table class="history-table"><thead><tr><th>Part</th><th>Name</th><th>Qty</th><th>Status</th><th>Serials / note</th><th></th></tr></thead><tbody>'
-      +(ls.length?ls.map(l=>'<tr><td class="mono">'+esc(l.pn)+'</td><td>'+esc(l.name||'')+'</td><td class="mono">'+esc(l.qty==null?'—':l.qty)+'</td><td>'+esc(l.status||'—')+'</td><td>'+esc([l.sn,l.note].filter(Boolean).join(' · ')||'—')+'</td><td class="actions-cell"><div class="row-actions">'+iconBtn('woEditLine',{id:l.id},ICON_EDIT,'Edit line')+iconBtn('woDelLine',{id:l.id},ICON_TRASH,'Delete line',true)+'</div></td></tr>').join(''):emptyRow(6,'No parts on this work order yet.'))
-      +'</tbody></table></div>'
-      +(used.length?'<p class="helper-note" style="margin-top:12px">Usage logged against this work order: '+used.map(h=>esc(h.pn)+' ('+esc(h.date)+')').join(', ')+'</p>':'')
-      +(w.src?'<p class="helper-note" style="margin-top:12px">Imported from: '+esc(w.src)+'</p>':'');
+    body.innerHTML=await woDetailHTML(ctx.wo);
   }
   enhanceInputs(body); $('modalOverlay').classList.add('open'); focusFirstField();
 };
@@ -2369,6 +2425,7 @@ async function deleteWo(wo){
   if(!await confirmDialog({title:'Delete work order '+wo+'?',message:(mine.length?plural(mine.length,'line')+' on it will also be deleted.\n':'')+'Stock, serials and history are not changed.',confirmLabel:'Delete work order',danger:true})) return;
   await batch(['workorders','woLines'],s=>{ s.workorders.delete(wo); mine.forEach(l=>s.woLines.delete(l.id)); });
   await addHistory({action:'Work order deleted',pn:'—',detail:wo+' removed',machine:w.machine||'',order:wo});
+  if(woExpandedWO===wo) woExpandedWO=null;
   await renderAll(); toast('Deleted work order '+wo);
 }
 async function deleteWoLine(id){
@@ -2376,20 +2433,25 @@ async function deleteWoLine(id){
   if(!await confirmDialog({title:'Delete this line?',message:l.pn+' will be removed from '+l.wo+'.',confirmLabel:'Delete line',danger:true})) return;
   await del('woLines',id);
   await addHistory({action:'Work order line deleted',pn:l.pn,name:l.name||'',detail:'Removed from '+l.wo,order:l.wo});
-  await renderAll(); toast('Deleted line'); await openModal('wodetail',{wo:l.wo});
+  await renderAll(); toast('Deleted line'); await refreshWoDetail(l.wo);
 }
 SAVERS.wo=saveWo;
-SAVERS.woline=async function(){ const r=await saveWoLine(); const wo=modalCtx.wo; setTimeout(()=>{ if(wo) openModal('wodetail',{wo}); },0); return r; };
+SAVERS.woline=async function(){ const r=await saveWoLine(); const wo=modalCtx.wo; setTimeout(()=>{ refreshWoDetail(wo); },0); return r; };
 Object.assign(ACTIONS,{
   woFilter:d=>{ woFilter=d.key; return renderWorkOrders(); },
-  woOpen:d=>openModal('wodetail',{wo:d.wo}),
+  woRange:d=>{ woRangeKey=d.key; return renderWorkOrders(); },
+  woOpen:d=>{
+    /* desktop: expand the details inline under the clicked row — small screens keep the modal */
+    if(woDetailIsInline()){ woExpandedWO=(woExpandedWO===d.wo)?null:d.wo; return renderWorkOrders(); }
+    return openModal('wodetail',{wo:d.wo});
+  },
   woEdit:d=>openModal('wo',{wo:d.wo}),
   woDel:d=>deleteWo(d.wo),
   addWo:()=>openModal('wo',{machine:woMachineFilter}),
   woAddLine:d=>openModal('woline',{wo:d.wo}),
   woEditLine:async d=>{ const l=await getOne('woLines',+d.id); if(l) return openModal('woline',{id:+d.id,wo:l.wo}); },
-  woDelLine:d=>deleteWoLine(+d.id),
-  checkData:()=>runDataCheck()
+  woDelLine:d=>deleteWoLine(+d.id)
+  /* checkData button commented out: checkData:()=>runDataCheck() */
 });
 
 /* ---------- integrity check (used before every import and from the header button) ---------- */
@@ -2450,13 +2512,14 @@ async function loadAllData(){
   const arr=await Promise.all(STORE_NAMES.map(n=>getAll(n))), d={}; STORE_NAMES.forEach((n,i)=>{ d[n]=arr[i]; }); return d;
 }
 function listIssues(items,max){ return items.slice(0,max).map(x=>'• '+x).join('\n')+(items.length>max?'\n… and '+(items.length-max)+' more':''); }
+/* Check data + merge import commented out (buttons removed from the header)
 async function runDataCheck(){
   const r=validateData(await loadAllData());
   if(!r.errors.length&&!r.warnings.length) return infoDialog('Data check passed','No problems found. Every stock row, serial, incoming entry, RMA and work order points to something that exists, and there are no duplicates.');
   return infoDialog('Data check: '+plural(r.errors.length,'problem')+', '+plural(r.warnings.length,'warning'),(r.errors.length?'Problems:\n'+listIssues(r.errors,12):'')+(r.warnings.length?(r.errors.length?'\n\n':'')+'Warnings:\n'+listIssues(r.warnings,8):''));
 }
 
-/* ---------- merge import: adds only what is missing, never overwrites, never duplicates ---------- */
+---------- merge import: adds only what is missing, never overwrites, never duplicates ----------
 async function mergeBackup(d){
   const cur=await loadAllData();
   const S='\u0001';
@@ -2482,6 +2545,7 @@ function chooseImportMode(fileName,lines,warnings){
     ov.classList.add('open'); $('importModeMerge').focus();
   });
 }
+---------- end check data / merge import ---------- */
 
 /* ---------- boot ---------- */
 (async()=>{
@@ -2514,7 +2578,7 @@ function chooseImportMode(fileName,lines,warnings){
       }
     },0);
     if(initialView!==activeView()) switchView(initialView,{fromHistory:true});
-    maybeShowBackupReminder();
+    /* backup reminder commented out: maybeShowBackupReminder(); */
   }catch(err){
     toast('Couldn’t open the local database: '+((err&&err.message)||err),'error');
   }
