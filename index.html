@@ -249,6 +249,20 @@
   .field input,.field select{width:100%; padding:8px 10px; border:1px solid var(--line); font-size:13px; background:var(--surface); color:var(--ink); font-family:inherit}
   .input-row{display:flex; gap:8px}
   .input-row input,.input-row select{flex:1; min-width:0}
+  /* part order line: manual part number next to the filtered part picker */
+  .pick-row{display:flex; gap:8px}
+  .pick-row input{flex:1 1 38%; min-width:0}
+  .pick-row select{flex:1 1 62%; min-width:0}
+  /* one serial number set per unit (qty) */
+  .sn-row{display:flex; gap:8px; align-items:center; margin-bottom:8px; flex-wrap:wrap}
+  .sn-row .sn-idx{flex:0 0 24px; text-align:right; font-size:11.5px; color:var(--muted); font-family:'IBM Plex Mono',monospace}
+  .sn-row input{flex:1 1 160px; min-width:0}
+  .sn-row select{flex:1 1 100%}
+  .sn-row .btn-scan{flex:0 0 auto; min-height:32px}
+  /* draft banner shown on top of the forms that keep drafts */
+  .draft-bar{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 10px; border:1px dashed var(--line-soft); background:var(--hover); font-size:11.5px; color:var(--muted); margin-bottom:14px}
+  .draft-bar .draft-text{line-height:1.45}
+  .draft-bar .draft-text b{color:var(--ink)}
   .field-error{font-size:12px; color:var(--danger); margin-top:5px; min-height:14px}
   .radio-row{display:flex; gap:14px; flex-wrap:wrap}
   .radio-row label{display:flex; align-items:center; gap:6px; font-size:13px; color:var(--ink)}
@@ -382,7 +396,7 @@
         <section class="view" id="view-parts">
           <div class="toolbar"><input class="search-input" id="partsSearch" placeholder="Search part number or name…" oninput="renderParts()"></div>
           <div class="filter-row" id="partsChips"></div>
-          <div class="table-scroll"><table><thead><tr><th>Part number</th><th>Name</th><th>Type</th><th>Total stock</th><th></th></tr></thead><tbody id="partsBody"></tbody></table></div>
+          <div class="table-scroll"><table><thead><tr><th>Part number</th><th>Name</th><th>Type</th><th>Standard price</th><th>Total stock</th><th></th></tr></thead><tbody id="partsBody"></tbody></table></div>
         </section>
 
         <section class="view" id="view-storage">
@@ -398,7 +412,7 @@
           <div class="toolbar"><input class="search-input" id="woSearch" placeholder="Search work order, machine, part number, serial, order…" oninput="renderWorkOrders()"><select class="select-control" id="woMachine" onchange="woMachineFilter=this.value;renderWorkOrders()" style="max-width:190px"></select><button class="btn btn-primary" type="button" data-act="addWo">+ New work order</button></div>
           <div class="filter-row" id="woChips"></div>
           <div class="filter-row" id="woRangeChips" style="margin-bottom:16px"></div>
-          <div class="table-scroll"><table><thead><tr><th>Work order</th><th>Machine</th><th>Type</th><th>Status</th><th>Opened</th><th>Closed</th><th>Order / PO</th><th>Lines</th><th></th></tr></thead><tbody id="woBody"></tbody></table></div>
+          <div class="table-scroll"><table><thead><tr><th>Work order</th><th>Machine</th><th>Type</th><th>Status</th><th>Opened</th><th>Closed</th><th>Order / PO</th><th>Lines</th><th>Days open</th><th></th></tr></thead><tbody id="woBody"></tbody></table></div>
         </section>
 
         <section class="view" id="view-rma">
@@ -420,7 +434,7 @@
 
   <div class="modal-overlay" id="modalOverlay">
     <div class="modal-box">
-      <div class="modal-head"><span id="modalTitle"></span><button class="modal-close" type="button" onclick="closeModal()" aria-label="Close">&times;</button></div>
+      <div class="modal-head"><span id="modalTitle"></span><button class="modal-close" type="button" onclick="closeModal(true)" aria-label="Close">&times;</button></div>
       <form id="modalForm" novalidate>
         <div id="modalBody"></div>
         <div class="modal-actions"><button type="button" class="btn btn-ghost" id="modalCancelBtn" onclick="closeModal()">Cancel</button><button type="submit" class="btn btn-primary" id="modalSubmitBtn">Save</button></div>
@@ -488,17 +502,17 @@ const TOAST_ICONS={
 const SUPABASE_URL='https://zbdfingylmphrorcgfve.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY='sb_publishable_n4yLmRE-o6tbS1uEyOPkfQ_E7kdky2W';
 const CLOUD_TABLES={
-  parts:{table:'parts',fields:['pn','name','type','min']},
+  parts:{table:'parts',fields:['pn','name','type','min','price']},
   storages:{table:'storages',fields:['name']},
   stock:{table:'stock',fields:['pn','storage','qty']},
   serials:{table:'serials',fields:['sn','pn','storage','status','machine','order','date','note','doa','rma','used_date']},
-  incoming:{table:'incoming',fields:['id','pn','storage','order','qty','sn','status','date','note']},
+  incoming:{table:'incoming',fields:['id','pn','storage','order','qty','sn','status','date','note','wo','line_id']},
   rma:{table:'rma',fields:['id','pn','order','old','new','machine','status','date','ts','new_created','wo','note']},
   history:{table:'history',fields:['id','pn','name','sn','action','detail','machine','storage','order','date','ts']},
   machines:{table:'machines',fields:['name','group']},
   machineGroups:{table:'machine_groups',fields:['name']},
   workorders:{table:'workorders',fields:['wo','machine','type','status','po','opened','closed','note','src']},
-  woLines:{table:'wo_lines',fields:['id','wo','pn','name','qty','status','sn','note','src']}
+  woLines:{table:'wo_lines',fields:['id','wo','pn','name','qty','status','sn','note','src','storage']}
 };
 const ALL='__all__', NONE='__none__';
 let modalType=null, modalCtx={}, currentStorageView=null;
@@ -589,7 +603,7 @@ async function cloudRequest(path,opts){
   throw lastErr;
 }
 function toCloudRecord(store,record){
-  const fields=CLOUD_TABLES[store].fields, out={};
+  const fields=activeFields(store), out={};
   fields.forEach(field=>{
     const source=field==='used_date'?'usedDate':field==='new_created'?'newCreated':field;
     if(record[source]!==undefined) out[field]=record[source];
@@ -635,16 +649,48 @@ function cloudFilter(key,value){
 }
 /* a quoted, percent-encoded value for PostgREST's in.() lists */
 function pgVal(v){ return '"'+encodeURIComponent(v==null?'':String(v)).replace(/[!'()*]/g,c=>'%'+c.charCodeAt(0).toString(16).toUpperCase()).replace(/\+/g,'%2B')+'"'; }
+/* Columns the Supabase tables may not have yet (the app ships with a schema file).
+   If one is missing the request is retried without it, so the app keeps working
+   and the user is told once which column to add. */
+const MISSING_COLS={};
+function activeFields(store){
+  const drop=MISSING_COLS[store];
+  const fields=CLOUD_TABLES[store].fields;
+  return drop?fields.filter(c=>!drop[c]):fields.slice();
+}
+function missingColOf(err){
+  if(!err||err.status!==400) return null;
+  const msg=String(err.message||'');
+  if(!/does not exist|could not find the|pgrst204/i.test(msg)) return null;
+  const m=/column "?([a-zA-Z_.]+)"?/i.exec(msg)||/'([a-zA-Z_]+)' column/i.exec(msg);
+  return m?m[1].split('.').pop():null;
+}
+function noteMissingCol(store,col){
+  if(!col) return false;
+  if(!MISSING_COLS[store]) MISSING_COLS[store]={};
+  if(MISSING_COLS[store][col]) return false;
+  MISSING_COLS[store][col]=true;
+  toast('Supabase is missing the column “'+col+'” on '+CLOUD_TABLES[store].table+' — run supabase-schema.sql to store it.','error');
+  return true;
+}
 function storeUrl(store){
   const t=CLOUD_TABLES[store];
   /* ordered by the primary key so rows arrive in the same order IndexedDB used to give us */
-  return t.table+'?select='+t.fields.join(',')+'&order='+CLOUD_KEYS[store][0]+'.asc&limit=10000';
+  return t.table+'?select='+activeFields(store).join(',')+'&order='+CLOUD_KEYS[store][0]+'.asc&limit=10000';
 }
 async function fetchStore(store){
   if(LOADED[store]) return;
   if(FETCHING[store]) return FETCHING[store];
   FETCHING[store]=(async()=>{
-    const rows=await cloudRequest(storeUrl(store))||[];
+    let rows=null;
+    for(let attempt=0;attempt<4;attempt++){
+      try{ rows=await cloudRequest(storeUrl(store))||[]; break; }
+      catch(err){
+        const col=missingColOf(err);
+        if(!col||!noteMissingCol(store,col)) throw err;
+      }
+    }
+    if(rows===null) throw new Error('could not load '+CLOUD_TABLES[store].table);
     const map=new Map();
     let max=0;
     rows.forEach(row=>{
@@ -672,12 +718,24 @@ function newId(store){
 async function upsertRecords(store,records){
   if(!records.length) return [];
   await fetchStore(store);
-  const payload=records.map(r=>toCloudRecord(store,r));
-  const res=await cloudRequest(CLOUD_TABLES[store].table,{
-    method:'POST',
-    headers:cloudHeaders({Prefer:'return=representation,resolution=merge-duplicates'}),
-    body:JSON.stringify(payload)
-  });
+  let payload=records.map(r=>toCloudRecord(store,r));
+  let res=null;
+  for(let attempt=0;attempt<4;attempt++){
+    try{
+      res=await cloudRequest(CLOUD_TABLES[store].table,{
+        method:'POST',
+        headers:cloudHeaders({Prefer:'return=representation,resolution=merge-duplicates'}),
+        body:JSON.stringify(payload)
+      });
+      break;
+    }catch(err){
+      /* the table is missing a column the app knows about: drop it and try again */
+      const col=missingColOf(err);
+      if(!col||!noteMissingCol(store,col)) throw err;
+      payload=payload.map(row=>{ const next=Object.assign({},row); delete next[col]; return next; });
+    }
+  }
+  if(res===null) throw new Error('could not save to '+CLOUD_TABLES[store].table);
   const saved=(res&&res.length?res:payload).map(r=>fromCloudRecord(store,r));
   saved.forEach(rec=>MEM[store].set(recKey(store,rec),rec));
   return saved;
@@ -866,7 +924,7 @@ async function applyOps(ops){
     }
     const puts=list.filter(o=>o.op==='put'||o.op==='add');
     const dels=list.filter(o=>o.op==='del');
-    const putKeys={}; puts.forEach(o=>{ putKeys[memKey(store,o.rec)]=true; });
+    const putKeys={}; puts.forEach(o=>{ putKeys[recKey(store,o.rec)]=true; });
     const conflicting=dels.some(o=>putKeys[memKey(store,o.key)]);
     if(conflicting){
       /* the same row is deleted and written again: apply strictly in order */
@@ -923,6 +981,7 @@ function parseHistDate(s){
 function histTs(h){ return h.ts||parseHistDate(h.date); }
 function addHistory(f){ return addRec('history',{pn:f.pn||'—', name:f.name||'', sn:f.sn||'', action:f.action||'', detail:f.detail||'', machine:f.machine||'', storage:f.storage||'', order:f.order||'', date:now(), ts:Date.now()}); }
 function labelType(t){ return {serialised:'Serialised',nonserialised:'Non-serialised',consumable:'Consumable'}[t]||t; }
+function fmtPrice(v){ return (v===null||v===undefined||v==='')?'—':Number(v).toFixed(2); }
 function esc(s){ return (s===null||s===undefined?'':String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 function da(o){ return Object.keys(o).map(k=>'data-'+k+'="'+esc(o[k])+'"').join(' '); }
 function plural(n,w){ return n+' '+w+(n===1?'':'s'); }
@@ -948,7 +1007,30 @@ function snIndex(history){
 }
 async function snTaken(sn,exceptIncomingId){
   if(await getOne('serials',sn)) return true;
-  return (await getAll('incoming')).some(i=>i.status==='Waiting'&&i.sn===sn&&i.id!==exceptIncomingId);
+  const v=String(sn||'').trim().toLowerCase();
+  return (await getAll('incoming')).some(i=>i.status==='Waiting'&&i.id!==exceptIncomingId&&splitSns(i.sn).some(x=>x.toLowerCase()===v));
+}
+/* an incoming entry can carry several serial numbers ("SN1, SN2") for one part order line */
+function splitSns(s){ return String(s==null?'':s).split(',').map(x=>x.trim()).filter(Boolean); }
+/* whole days since an entry was logged (0 on the day it was created) */
+function daysSince(dateStr){ const ts=parseHistDate(dateStr); if(!ts) return null; const d=Math.floor((Date.now()-ts)/864e5); return d>0?d:0; }
+/* part numbers typed straight into a form land in the parts list automatically */
+async function ensurePart(pn,name,type){
+  const existing=await getOne('parts',pn);
+  if(existing) return existing;
+  const part={pn,name:name||pn,type:type||'nonserialised',min:null,price:null};
+  await put('parts',part);
+  await addHistory({action:'Part added',pn,name:part.name,detail:'Created automatically · '+labelType(part.type)+' part'});
+  toast('New part '+pn+' added to the parts list');
+  return part;
+}
+/* the part order reference of a work order — created the first time a line is added */
+async function ensurePartOrder(w){
+  if(w&&w.po) return w.po;
+  const po='PO-'+String(w&&w.wo?w.wo:'').replace(/\s+/g,'');
+  await put('workorders',Object.assign({},w,{po}));
+  w.po=po;
+  return po;
 }
 
 /* An RMA'd serial is the AFFECTED part (the faulty one handed back to the client).
@@ -1261,6 +1343,7 @@ function histCatOf(h){
   if(/deleted|removed/.test(a)) return 'deleted';
   if(/edited|renamed|adjusted|moved/.test(a)) return 'edited';
   if(/^(incoming|arrived|received)/.test(a)) return 'incoming';
+  if(/^part order/.test(a)) return 'incoming';
   if(/^used/.test(a)) return 'used';
   if(/rma/.test(a)) return 'rma';
   if(/added/.test(a)) return 'added';
@@ -1419,7 +1502,7 @@ function partHistoryHTML(part,stock,serials,history){
     rows.push('<tr><td>'+tag(installed?'Installed':'Used',installed)+'</td><td>—</td><td>'+esc(h.machine||'—')+'</td><td>'+esc(h.date||'—')+'</td><td>'+esc(h.storage||'—')+'</td></tr>');
   });
   stock.filter(s=>s.pn===part.pn&&s.qty>0).forEach(s=>rows.push('<tr><td>'+tag('In stock',false)+'</td><td>—</td><td>—</td><td>—</td><td>'+esc(s.storage)+' ('+esc(s.qty)+')</td></tr>'));
-  return '<tr class="part-history-row"><td colspan="5"><p class="part-history-caption">Part history · '+esc(part.pn)+' · '+esc(part.name)+'</p><div class="table-scroll"><table class="part-history-table"><thead><tr><th>Status</th><th>Serial</th><th>Machine</th><th>When</th><th>Where</th></tr></thead><tbody>'+(rows.length?rows.join(''):emptyRow(5,'No history recorded.'))+'</tbody></table></div></td></tr>';
+  return '<tr class="part-history-row"><td colspan="6"><p class="part-history-caption">Part history · '+esc(part.pn)+' · '+esc(part.name)+'</p><div class="table-scroll"><table class="part-history-table"><thead><tr><th>Status</th><th>Serial</th><th>Machine</th><th>When</th><th>Where</th></tr></thead><tbody>'+(rows.length?rows.join(''):emptyRow(5,'No history recorded.'))+'</tbody></table></div></td></tr>';
 }
 async function renderParts(){
   const [all,stock,serials,rmas]=await Promise.all([getAll('parts'),getAll('stock'),getAll('serials'),getAll('rma')]);
@@ -1434,10 +1517,10 @@ async function renderParts(){
   const parts=base.filter(p=>ok(p,partsFilter));
   $('partsBody').innerHTML=parts.map(p=>{
     const total=partStockTotal(p.pn,p,stock,serials);
-    return '<tr class="clickrow" data-act="goPart" data-pn="'+esc(p.pn)+'"><td><span class="id-cell mono">'+esc(p.pn)+copyBtn(p.pn)+'</span></td><td>'+esc(p.name)+'</td><td><span class="badge badge-'+p.type+'">'+labelType(p.type)+'</span>'+(doaN(p.pn)?'<span class="tag tag-doa">DOA '+doaN(p.pn)+'</span>':'')+(rmaN(p.pn)?'<span class="tag tag-rma">RMA '+rmaN(p.pn)+'</span>':'')+'</td><td class="mono">'+total+(p.min>0?'<span class="hint"> / min '+p.min+'</span>':'')+(isLow(p)?'<span class="tag tag-low">LOW</span>':'')+'</td>'
+    return '<tr class="clickrow" data-act="goPart" data-pn="'+esc(p.pn)+'"><td><span class="id-cell mono">'+esc(p.pn)+copyBtn(p.pn)+'</span></td><td>'+esc(p.name)+'</td><td><span class="badge badge-'+p.type+'">'+labelType(p.type)+'</span>'+(doaN(p.pn)?'<span class="tag tag-doa">DOA '+doaN(p.pn)+'</span>':'')+(rmaN(p.pn)?'<span class="tag tag-rma">RMA '+rmaN(p.pn)+'</span>':'')+'</td><td class="nowrap">'+esc(fmtPrice(p.price))+'</td><td class="mono">'+total+(p.min>0?'<span class="hint"> / min '+p.min+'</span>':'')+(isLow(p)?'<span class="tag tag-low">LOW</span>':'')+'</td>'
       +'<td class="actions-cell"><div class="row-actions"><button type="button" class="btn btn-ghost btn-sm" data-act="usePart" '+da({pn:p.pn})+'>Use</button>'+iconBtn('partHistory',{pn:p.pn},ICON_HIST,'Part history')
       +iconBtn('editPart',{pn:p.pn},ICON_EDIT,'Edit part')+iconBtn('delPart',{pn:p.pn},ICON_TRASH,'Delete part',true)+'</div></td></tr>'+(partHistoryOpen===p.pn?partHistoryHTML(p,stock,serials,history):'');
-  }).join('')||emptyRow(5,all.length?'No parts match your search or filter.':'No parts yet. Add one to start tracking stock.');
+  }).join('')||emptyRow(6,all.length?'No parts match your search or filter.':'No parts yet. Add one to start tracking stock.');
 }
 async function deletePart(pn){
   const part=await getOne('parts',pn);
@@ -1587,12 +1670,14 @@ async function deleteSerial(sn){
 /* ---------- incoming ---------- */
 function incField(label,html){ return '<div><dt>'+label+'</dt><dd>'+html+'</dd></div>'; }
 async function renderIncoming(){
-  const [allIncoming,parts]=await Promise.all([getAll('incoming'),getAll('parts')]);
+  const [allIncoming,parts,lines]=await Promise.all([getAll('incoming'),getAll('parts'),getAll('woLines')]);
   const incoming=allIncoming.filter(i=>i.status==='Waiting');
   const el=$('incomingList');
   if(!el) return;
   const cnt=$('incCount'); if(cnt) cnt.textContent=incoming.length;
   const byPn={}; parts.forEach(p=>{ byPn[p.pn]=p; });
+  /* how many lines the part order behind an entry has */
+  const lineCount={}; lines.forEach(l=>{ lineCount[l.wo]=(lineCount[l.wo]||0)+1; });
   if(!incoming.length){
     el.style.display='block';
     el.innerHTML='<div class="empty-box"><b>Nothing on order right now</b>Log a part you’re waiting for and it will appear here until it arrives.</div>';
@@ -1601,17 +1686,21 @@ async function renderIncoming(){
   el.style.display='';
   el.innerHTML=incoming.map(i=>{
     const p=byPn[i.pn];
-    const isSerial=!!i.sn;
+    const sns=splitSns(i.sn);
+    const isSerial=sns.length>0;
+    const waiting=daysSince(i.date);
     return '<article class="inc-card">'
       +'<div class="inc-top"><div class="inc-title"><span class="inc-pn mono">'+esc(i.pn)+'</span><span class="inc-name">'+esc(p?p.name:'Unknown part')+'</span>'+(p?'<span class="badge badge-'+p.type+'">'+labelType(p.type)+'</span>':'')+'</div>'
       +'<span class="inc-status">Waiting to arrive</span></div>'
       +'<dl class="inc-grid">'
-      +incField('Order / ticket','<span class="mono">'+esc(i.order)+'</span>'+copyBtn(i.order))
-      +incField(isSerial?'Serial number':'Quantity',isSerial?('<span class="mono">'+esc(i.sn)+'</span>'+copyBtn(i.sn)):esc(plural(i.qty,'unit')))
+      +incField(i.wo?'Part order':'Order / ticket','<span class="mono">'+esc(i.order||'—')+'</span>'+(i.order?copyBtn(i.order):''))
+      +(i.wo?incField('Work order','<span class="mono">'+esc(i.wo)+'</span>'+copyBtn(i.wo))+incField('Lines in this part order',esc(lineCount[i.wo]?plural(lineCount[i.wo],'line'):'—')):'')
+      +incField(isSerial?'Serial number(s)':'Quantity',isSerial?('<span class="mono">'+esc(sns.join(', '))+'</span>'+copyBtn(sns.join(', '))):esc(i.qty==null?'—':plural(i.qty,'unit')))
       +incField('Will be stored in',esc(i.storage))
       +incField('Logged on','<span title="The date this incoming order was recorded in Stocktrack">'+esc(i.date||'—')+'</span>')
+      +incField('Days waiting','<span title="Whole days since this entry was logged">'+esc(waiting==null?'—':plural(waiting,'day'))+'</span>')
       +'</dl>'
-      +'<p class="inc-hint">Logged on is when this incoming order was added to Stocktrack. Arrived? Press <b>Mark as arrived</b> to add it to <b>'+esc(i.storage)+'</b>.</p>'
+      +'<p class="inc-hint">Days waiting counts from when this entry was added to Stocktrack. Arrived? Press <b>Mark as arrived</b> to add it to <b>'+esc(i.storage)+'</b>.</p>'
       +'<div class="inc-actions"><button type="button" class="btn btn-primary" data-act="arrive" '+da({id:i.id})+'>Mark as arrived</button>'
       +'<button type="button" class="btn btn-ghost" data-act="editIncoming" '+da({id:i.id})+'>Edit</button>'
       +'<button type="button" class="btn btn-danger-outline" data-act="delIncoming" '+da({id:i.id})+'>Delete</button></div>'
@@ -1621,19 +1710,36 @@ async function renderIncoming(){
 async function markArrived(id){
   const rec=await getOne('incoming',id);
   if(!rec||rec.status!=='Waiting') return;
-  if(rec.sn){ const d=await rmaDeclared(rec.sn); if(d){ toast(rmaDeniedMsg(rec.sn,d),'error'); return; } }
-  if(rec.sn && await getOne('serials',rec.sn)){ toast('Serial “'+rec.sn+'” already exists in the system. Edit this incoming entry first.','error'); return; }
+  const part=await getOne('parts',rec.pn);
+  const sns=splitSns(rec.sn);
+  if(part&&part.type==='serialised'&&!sns.length){
+    toast('Add the serial numbers first — edit this entry and enter each unit that arrived.','error');
+    return;
+  }
+  for(const sn of sns){
+    const d=await rmaDeclared(sn);
+    if(d){ toast(rmaDeniedMsg(sn,d),'error'); return; }
+    if(await getOne('serials',sn)){ toast('Serial “'+sn+'” already exists in the system. Edit this incoming entry first.','error'); return; }
+  }
   rec.status='Arrived';
   await put('incoming',rec);
   await commitReceive(rec);
-  const part=await getOne('parts',rec.pn);
-  await addHistory({action:'Arrived',pn:rec.pn,name:part?part.name:'',sn:rec.sn||'',detail:(rec.sn?('Serial '+rec.sn):('Qty '+rec.qty))+' arrived at '+rec.storage,storage:rec.storage,order:rec.order});
+  await addHistory({action:'Arrived',pn:rec.pn,name:part?part.name:'',sn:sns.join(', '),detail:(sns.length?('Serial '+sns.join(', ')):('Qty '+rec.qty))+' arrived at '+rec.storage,storage:rec.storage,order:rec.order});
+  /* the work order line behind this entry comes off "Waiting part" automatically */
+  if(rec.line_id!=null){
+    const line=await getOne('woLines',rec.line_id);
+    if(line&&line.status==='Waiting part'){
+      await put('woLines',Object.assign({},line,{status:'Received'}));
+      await addHistory({action:'Work order line updated',pn:rec.pn,name:line.name||'',detail:'Line on '+rec.wo+' marked as Received — the parts arrived at '+rec.storage,order:rec.wo});
+    }
+  }
   await renderAll();
   toast('Marked arrived: '+rec.pn+' at '+rec.storage);
 }
 async function commitReceive(rec){
-  if(rec.sn){ await put('serials',{sn:rec.sn,pn:rec.pn,storage:rec.storage,status:'in_stock',machine:'',order:rec.order||'',date:now(),note:''}); }
-  else { const s=await getOne('stock',[rec.pn,rec.storage]); await put('stock',{pn:rec.pn,storage:rec.storage,qty:(s?s.qty:0)+rec.qty}); }
+  const sns=splitSns(rec.sn);
+  if(sns.length){ for(const sn of sns) await put('serials',{sn,pn:rec.pn,storage:rec.storage,status:'in_stock',machine:'',order:rec.order||'',date:now(),note:''}); }
+  else if(!rec.sn){ const s=await getOne('stock',[rec.pn,rec.storage]); await put('stock',{pn:rec.pn,storage:rec.storage,qty:(s?s.qty:0)+(rec.qty||0)}); }
 }
 async function deleteIncoming(id){
   const rec=await getOne('incoming',id);
@@ -1754,7 +1860,7 @@ const MODAL_SUBMIT={part:['Add part','Save changes'],partHistory:['Close'],stora
 
 async function openModal(type,ctx){
   ctx=ctx||{};
-  modalType=type; modalCtx=ctx;
+  modalType=type; modalCtx=ctx; draftKey='';
   const editing=!!({part:ctx.pn,storage:ctx.name,machine:ctx.name,group:ctx.name,receive:ctx.id})[type];
   const pick=(arr)=>arr[editing&&arr.length>1?1:0];
   $('modalTitle').textContent=pick(MODAL_TITLES[type]);
@@ -1762,7 +1868,7 @@ async function openModal(type,ctx){
   $('modalSubmitBtn').style.display='';
   $('modalCancelBtn').textContent='Cancel';
   const body=$('modalBody');
-  const show=()=>{ enhanceInputs(body); $('modalOverlay').classList.add('open'); focusFirstField(); };
+  const show=async()=>{ enhanceInputs(body); await initDraft(); $('modalOverlay').classList.add('open'); focusFirstField(); };
   const block=msg=>{ body.innerHTML='<p class="hint">'+esc(msg)+'</p>'; $('modalSubmitBtn').style.display='none'; $('modalCancelBtn').textContent='Close'; $('modalOverlay').classList.add('open'); };
 
   if(type==='partHistory'){
@@ -1801,7 +1907,9 @@ async function openModal(type,ctx){
     let hasRecords=false;
     if(p){
       const [stock,serials,incoming]=await Promise.all([getAll('stock'),getAll('serials'),getAll('incoming')]);
-      hasRecords=stock.some(s=>s.pn===p.pn&&s.qty>0)||serials.some(s=>s.pn===p.pn)||incoming.some(i=>i.pn===p.pn&&i.status==='Waiting');
+      /* part order entries (created automatically from a work order) don't lock the type —
+         only real stock, real serials or a hand logged incoming order do */
+      hasRecords=stock.some(s=>s.pn===p.pn&&s.qty>0)||serials.some(s=>s.pn===p.pn)||incoming.some(i=>i.pn===p.pn&&i.status==='Waiting'&&!i.wo);
     }
     const cur=p?p.type:'nonserialised';
     const radio=(v,l)=>{ const dis=hasRecords&&((cur==='serialised')!==(v==='serialised')); return '<label><input type="radio" name="ptype" value="'+v+'"'+(cur===v?' checked':'')+(dis?' disabled':'')+'> '+l+'</label>'; };
@@ -1810,6 +1918,7 @@ async function openModal(type,ctx){
       +'<div class="field"><label>Part number</label><div class="input-row"><input id="f_pn" required value="'+esc(p?p.pn:'')+'">'+scanBtn('f_pn')+'</div></div>'
       +'<div class="field"><label>Name</label><input id="f_name" required value="'+esc(p?p.name:'')+'"></div>'
       +'<div class="field"><label>Minimum stock (optional)</label><input id="f_min" type="number" min="0" value="'+esc(p&&p.min!=null?p.min:'')+'" placeholder="Warn when total stock drops below this"></div>'
+      +'<div class="field"><label>Standard price (optional)</label><input id="f_price" type="number" min="0" step="0.01" value="'+esc(p&&p.price!=null?p.price:'')+'" placeholder="Standard price per unit, e.g. 12.50"></div>'
       +(p?'<p class="helper-note">Changing the part number updates it everywhere — stock, incoming and RMAs. History keeps the old number.</p>':'');
   } else if(type==='storage'){
     const s=ctx.name?await getOne('storages',ctx.name):null;
@@ -1821,13 +1930,18 @@ async function openModal(type,ctx){
     if(ctx.id&&(!rec||rec.status!=='Waiting')) return block('This entry has already arrived or no longer exists, so it can’t be edited.');
     if(!parts.length) return block('Add a part first before logging something incoming.');
     if(!storages.length) return block('Add a storage first before logging something incoming.');
+    const recQty=rec?((rec.qty||splitSns(rec.sn).length)||1):1;
     body.innerHTML='<div class="field"><label for="f_pnSearch">Find a part</label><input id="f_pnSearch" class="part-picker-search" type="search" placeholder="Search by part number or name" oninput="filterReceiveParts()"><label for="f_pn">Part</label><select id="f_pn" class="part-picker-select" onchange="onReceivePartChange()">'+parts.map(p=>'<option value="'+esc(p.pn)+'" data-type="'+p.type+'" data-search="'+esc((p.pn+' '+p.name).toLowerCase())+'"'+(rec&&rec.pn===p.pn?' selected':'')+'>'+esc(p.pn)+' — '+esc(p.name)+'</option>').join('')+'</select><p class="helper-note">Use the search to narrow the list, or choose directly from the select.</p></div>'
       +'<div class="field"><label>Order / ticket (optional)</label><input id="f_order" value="'+esc(rec?rec.order:'')+'"></div>'
       +'<div class="field"><label>Storage</label><select id="f_storage">'+storages.map(s=>'<option value="'+esc(s.name)+'"'+(rec&&rec.storage===s.name?' selected':'')+'>'+esc(s.name)+'</option>').join('')+'</select></div>'
-      +'<div class="field" id="f_qtyWrap"><label>Quantity</label><input id="f_qty" type="number" min="1" value="'+(rec&&rec.qty?rec.qty:1)+'"></div>'
-      +'<div class="field" id="f_snWrap" style="display:none"><label>Serial number</label><div class="input-row"><input id="f_sn" value="'+esc(rec&&rec.sn?rec.sn:'')+'">'+scanBtn('f_sn')+'</div></div>'
+      +'<div class="field" id="f_qtyWrap"><label>Quantity</label><input id="f_qty" type="number" min="1" value="'+recQty+'" oninput="onReceiveQtyChange()"></div>'
+      +'<div class="field" id="f_snWrap" style="display:none"><label>Serial numbers</label><div id="f_snSet"></div><p class="helper-note">One serial number per unit — the quantity above sets how many you can enter.</p></div>'
       +(rec?'':'<div class="field"><label>Status</label><select id="f_status"><option value="Waiting">Waiting arrival</option><option value="Arrived">Arrived</option></select></div>');
     await onReceivePartChange();
+    /* the serial number rows are f_snSet_0, f_snSet_1 … — fill them back in on edit */
+    const pre=splitSns(rec?rec.sn:'');
+    pre.forEach((v,i)=>{ const el=$('f_snSet_'+i); if(el) el.value=v; });
+    if(pre.length) refreshSnPicks('f_snSet');
   } else if(type==='use'){
     const [parts,storages,machines]=await Promise.all([getAll('parts'),getAll('storages'),getAll('machines')]);
     if(!parts.length) return block('Add a part first before logging usage.');
@@ -1850,7 +1964,7 @@ async function openModal(type,ctx){
     body.innerHTML='<div class="field"><label>Part</label><select id="f_pn">'+parts.map(p=>'<option value="'+esc(p.pn)+'">'+esc(p.pn)+' — '+esc(p.name)+'</option>').join('')+'</select></div>'
       +machineSelectHTML('f_machine',machines)
       +'<div class="field"><label>Affected serial number</label><select id="f_oldSel" onchange="oldSelChange()"></select><div class="input-row" id="f_oldWrap" style="display:none;margin-top:8px"><input id="f_old" placeholder="Type the serial number" oninput="clearOldErr()" onblur="checkOldSerial()">'+scanBtn('f_old')+'</div><div class="field-error" id="f_old_err"></div></div>'
-      +'<div class="field"><label>Replacement serial number</label><div class="input-row"><input id="f_new" required oninput="clearNewErr()" onblur="checkNewSerial()">'+scanBtn('f_new')+'</div><div class="field-error" id="f_new_err"></div></div>'
+      +'<div class="field"><label>Replacement serial number (optional)</label><div class="input-row"><input id="f_new" placeholder="Leave empty if the replacement isn’t known yet" oninput="clearNewErr()" onblur="checkNewSerial()">'+scanBtn('f_new')+'</div><div class="field-error" id="f_new_err"></div><p class="helper-note">You can leave this empty and fill it in later by editing the RMA.</p></div>'
       +'<div class="field"><label>Work order number</label><input id="f_order" placeholder="WO-01234567"></div>';
     $('f_pn').onchange=()=>refreshOld(); $('f_machine').onchange=()=>refreshOld();
     if(ctx.pn) $('f_pn').value=ctx.pn;
@@ -1873,9 +1987,10 @@ async function openModal(type,ctx){
   } else if(type==='rmaedit'){
     const r=await getOne('rma',ctx.id);
     if(!r) return block('This RMA no longer exists.');
-    body.innerHTML='<div class="info-block"><div><span>Part</span><b class="mono">'+esc(r.pn)+'</b></div><div><span>Affected</span><b class="mono">'+esc(r.old)+'</b></div><div><span>Replacement</span><b class="mono">'+esc(r.new)+'</b></div><div><span>Machine</span><b>'+esc(r.machine||'—')+'</b></div></div>'
+    body.innerHTML='<div class="info-block"><div><span>Part</span><b class="mono">'+esc(r.pn)+'</b></div><div><span>Affected</span><b class="mono">'+esc(r.old)+'</b></div><div><span>Machine</span><b>'+esc(r.machine||'—')+'</b></div></div>'
+      +'<div class="field"><label>Replacement serial number (optional)</label><div class="input-row"><input id="f_new" value="'+esc(r.new||'')+'" placeholder="Leave empty if the replacement isn’t known yet" oninput="clearNewErr()" onblur="checkNewSerial()">'+scanBtn('f_new')+'</div><div class="field-error" id="f_new_err"></div><p class="helper-note">Fill this in once the replacement unit is known — it will be marked as installed in '+(r.machine?'<b>'+esc(r.machine)+'</b>':'the machine')+'. Clear it to take the replacement back out.</p></div>'
       +'<div class="field"><label>Work order number</label><input id="f_order" value="'+esc(r.order||'')+'"></div>'
-      +'<div class="field"><label>Status</label><select id="f_status"><option'+(r.status!=='Closed'?' selected':'')+'>Replaced</option><option'+(r.status==='Closed'?' selected':'')+'>Closed</option></select></div>';
+      +'<div class="field"><label>Status</label><select id="f_status">'+optList(['Pending','Replaced','Closed'],r.status||'Pending')+'</select></div>';
   } else if(type==='moveserial'){
     const [s,storages]=await Promise.all([getOne('serials',ctx.sn),getAll('storages')]);
     if(!s||s.status!=='in_stock') return block('This serial is no longer in stock, so it can’t be moved.');
@@ -1895,19 +2010,191 @@ async function openModal(type,ctx){
       +'<div class="field"><label>Stored in</label><select id="f_storage">'+storages.map(x=>'<option value="'+esc(x.name)+'"'+(x.name===s.storage?' selected':'')+'>'+esc(x.name)+'</option>').join('')+'</select></div>'
       +'<div class="field"><label>Note (optional)</label><input id="f_note" value="'+esc(s.note||'')+'" placeholder="e.g. refurbished, damaged box"></div>';
   }
-  show();
+  await show();
 }
-function closeModal(){
+function closeModal(keepDraft){
   $('modalOverlay').classList.remove('open');
   $('modalForm').reset();
   modalType=null;
+  clearTimeout(draftTimer);
+  /* Complete and Cancel drop the draft — closing the form any other way keeps it */
+  if(keepDraft===true) draftKey='';
+  else clearDraft();
 }
 
+/* ---------- form drafts --------------------------------------------------
+   Everything typed into a draft form is kept on this device while the form is
+   open, so the user can go and look something up and come back to it. Only
+   pressing Complete (save) or Cancel throws the draft away. A draft is always
+   brought back in, but the "Draft restored" notice is only shown the very
+   first time it returns — coming back again restores it quietly. */
+const DRAFT_TYPES=['wo','woline','receive'];
+let draftKey='', draftApplying=false, draftTimer=null, draftShown=false;
+const DRAFT_BAR_HTML='<div class="draft-bar" id="draftBar" style="display:none"><span class="draft-text" id="draftText"></span><button type="button" class="btn btn-ghost btn-sm" data-act="discardDraft">Discard draft</button></div>';
+function draftKeyFor(type,ctx){
+  ctx=ctx||{};
+  const scope=type==='woline'?('wo:'+(ctx.wo||'')):type==='receive'?('id:'+(ctx.id||'new')):('wo:'+(ctx.wo||'new'));
+  return 'stocktrack-draft:'+type+':'+scope;
+}
+function draftRead(){
+  if(!draftKey) return null;
+  try{
+    const raw=localStorage.getItem(draftKey);
+    if(!raw) return null;
+    const d=JSON.parse(raw);
+    return d&&d.values&&Object.keys(d.values).length?d:null;
+  }catch(e){ return null; }
+}
+function updateDraftBar(mode){
+  const bar=$('draftBar'), txt=$('draftText');
+  if(!bar||!txt) return;
+  if(!draftKey||DRAFT_TYPES.indexOf(modalType)<0){ bar.style.display='none'; return; }
+  bar.style.display='flex';
+  txt.innerHTML=mode==='restored'
+    ?'<b>Draft restored.</b> Carry on where you left off, or throw it away with <b>Discard draft</b>.'
+    :mode==='cleared'?'Every change is kept as a <b>draft</b> on this device until you save or cancel.'
+    :'<b>Draft saved</b> on this device — finish it later, or press <b>Cancel</b> to throw it away.';
+}
+function draftWrite(){
+  if(!draftKey||draftApplying) return;
+  const values={};
+  Array.from($('modalForm').elements).forEach(el=>{
+    if(el.id&&el.id.indexOf('f_')===0&&el.type!=='radio'&&el.type!=='submit'&&el.type!=='button') values[el.id]=el.value;
+  });
+  if(!Object.keys(values).length) return;
+  try{ localStorage.setItem(draftKey,JSON.stringify({ts:Date.now(),shown:draftShown,values})); }catch(e){ return; }
+  updateDraftBar('saved');
+}
+function scheduleDraft(){ if(!draftKey||draftApplying) return; clearTimeout(draftTimer); draftTimer=setTimeout(draftWrite,400); }
+function clearDraft(){
+  clearTimeout(draftTimer);
+  draftShown=false;
+  if(draftKey){ try{ localStorage.removeItem(draftKey); }catch(e){} }
+  updateDraftBar('cleared');
+}
+async function applyDraftValues(values){
+  draftApplying=true;
+  try{
+    if(modalType==='woline'){
+      if(values.f_pn) $('f_pn').value=values.f_pn;
+      if(values.f_qty) $('f_qty').value=values.f_qty;
+      await onWoLinePnChanged();
+    } else if(modalType==='receive'){
+      if(values.f_pn) $('f_pn').value=values.f_pn;
+      if(values.f_qty) $('f_qty').value=values.f_qty;
+      await onReceivePartChange();
+      if(values.f_pnSearch) $('f_pnSearch').value=values.f_pnSearch;
+      filterReceiveParts();
+    }
+    Object.keys(values).forEach(id=>{
+      const el=$(id);
+      if(!el||!el.id||el.type==='radio') return;
+      el.value=values[id];
+      const w=el.closest?el.closest('.clearable'):null;
+      if(w) w.classList.toggle('has-value',el.value!=='');
+    });
+    if(modalType==='woline'){
+      /* the picker filter and the part type may have changed, so rebuild the rows
+         while keeping whatever serial numbers are already in them */
+      const snInPlay=snValues('f_snSet');
+      filterWoLineParts();
+      renderWoLineSnRows(snInPlay);
+    }
+  }finally{ draftApplying=false; }
+}
+async function initDraft(){
+  draftKey=''; draftShown=false;
+  if(DRAFT_TYPES.indexOf(modalType)<0) return;
+  /* only forms that start something new keep a draft */
+  if((modalType==='wo'&&modalCtx.wo)||(modalType==='woline'&&modalCtx.id)||(modalType==='receive'&&modalCtx.id)) return;
+  draftKey=draftKeyFor(modalType,modalCtx);
+  $('modalBody').insertAdjacentHTML('afterbegin',DRAFT_BAR_HTML);
+  const saved=draftRead();
+  if(saved){
+    await applyDraftValues(saved.values);
+    /* the draft is always brought back, but the notice is only shown the very
+       first time — returning to the form again restores it quietly */
+    draftShown=true;
+    if(saved.shown) updateDraftBar('');
+    else{
+      updateDraftBar('restored');
+      try{ localStorage.setItem(draftKey,JSON.stringify({ts:saved.ts||Date.now(),shown:true,values:saved.values})); }catch(e){}
+    }
+  }
+  else updateDraftBar('');
+}
+function discardDraftForm(){
+  clearDraft();
+  draftApplying=true;
+  try{
+    $('modalForm').reset();
+    if(modalType==='receive') onReceivePartChange();
+    else if(modalType==='woline') onWoLinePnChanged();
+  }catch(e){}finally{ draftApplying=false; }
+  updateDraftBar('');
+  toast('Draft discarded','info');
+}
+
+/* ---------- serial number rows: one input per unit (qty) -------------------
+   When existing serials are passed in, every row also gets a select of the
+   serial numbers of that part that are already in Stocktrack (RMA units are
+   hidden) sorted by serial number. */
+function snRowSet(setId,count,existing,prefill,withScan){
+  const set=$(setId); if(!set) return;
+  count=Math.max(0,parseInt(count,10)||0);
+  let html='';
+  for(let i=0;i<count;i++){
+    html+='<div class="sn-row">'
+      +(existing?'<span class="sn-idx">'+(i+1)+'</span>':'')
+      +'<input id="'+setId+'_'+i+'" placeholder="Serial number '+(i+1)+'" autocomplete="off" oninput="refreshSnPicks(\''+setId+'\')">'
+      +(withScan?scanBtn(setId+'_'+i):'')
+      +(existing?'<select class="sn-pick" id="pick_'+setId+'_'+i+'" data-set="'+setId+'" onchange="snPickChange(this)"><option value="">Existing serial…</option>'+existing.map(sn=>'<option value="'+esc(sn)+'">'+esc(sn)+'</option>').join('')+'</select>':'')
+      +'</div>';
+  }
+  set.innerHTML=html;
+  (prefill||[]).forEach((v,i)=>{ const el=$(setId+'_'+i); if(el&&v) el.value=v; });
+  refreshSnPicks(setId);
+}
+function snValues(setId){
+  const set=$(setId);
+  return set?Array.from(set.querySelectorAll('input')).map(i=>i.value.trim()).filter(Boolean):[];
+}
+function snPickChange(sel){
+  const input=$(sel.id.replace('pick_',''));
+  if(input&&sel.value) input.value=sel.value;
+  refreshSnPicks(sel.dataset.set||'f_snSet');
+}
+/* hide serials that are already used by another row, so the same unit can’t be picked twice */
+function refreshSnPicks(setId){
+  const set=$(setId); if(!set) return;
+  const chosen=new Set();
+  set.querySelectorAll('input').forEach(inp=>{ const v=inp.value.trim().toLowerCase(); if(v) chosen.add(v); });
+  set.querySelectorAll('select.sn-pick').forEach(sel=>{
+    const paired=$(sel.id.replace('pick_',''));
+    const cur=paired?paired.value.trim().toLowerCase():sel.value.toLowerCase();
+    Array.from(sel.options).forEach(o=>{
+      if(!o.value) return;
+      const v=o.value.toLowerCase();
+      o.hidden=chosen.has(v)&&v!==cur;
+    });
+    if(paired&&sel.value.toLowerCase()!==cur) sel.value='';
+  });
+}
 async function onReceivePartChange(){
   const sel=$('f_pn');
-  const t=sel.selectedOptions[0]?sel.selectedOptions[0].dataset.type:'nonserialised';
-  $('f_qtyWrap').style.display=t==='serialised'?'none':'block';
-  $('f_snWrap').style.display=t==='serialised'?'block':'none';
+  const t=sel&&sel.selectedOptions[0]?sel.selectedOptions[0].dataset.type:'nonserialised';
+  const isSerial=t==='serialised';
+  $('f_qtyWrap').style.display='block';
+  $('f_snWrap').style.display=isSerial?'block':'none';
+  if(isSerial) snRowSet('f_snSet',$('f_qty').value,null,null,true);
+  else $('f_snSet').innerHTML='';
+}
+/* the quantity decides how many serial number inputs are rendered */
+function onReceiveQtyChange(){
+  const wrap=$('f_snSet'), sel=$('f_pn');
+  if(!wrap||!sel||!sel.selectedOptions[0]||sel.selectedOptions[0].dataset.type!=='serialised') return;
+  const prev=snValues('f_snSet');
+  snRowSet('f_snSet',$('f_qty').value,null,prev,true);
 }
 function filterReceiveParts(){
   const search=($('f_pnSearch').value||'').trim().toLowerCase();
@@ -1962,6 +2249,9 @@ $('modalForm').addEventListener('submit',async e=>{
     toast((err&&err.message)||'Something went wrong. Please try again.','error');
   }finally{ btn.disabled=false; }
 });
+/* every change to a draft form is kept on this device (see initDraft above) */
+$('modalForm').addEventListener('input',scheduleDraft);
+$('modalForm').addEventListener('change',scheduleDraft);
 
 async function savePart(){
   const type=document.querySelector('input[name=ptype]:checked').value;
@@ -1970,28 +2260,34 @@ async function savePart(){
   if(!pn||!name) throw new Error('Part number and name are required.');
   const minRaw=$('f_min').value.trim(), min=minRaw===''?null:parseInt(minRaw,10);
   if(min!==null&&(isNaN(min)||min<0)) throw new Error('Minimum stock must be 0 or more.');
+  const priceRaw=$('f_price').value.trim(), price=priceRaw===''?null:parseFloat(priceRaw);
+  if(price!==null&&(isNaN(price)||price<0)) throw new Error('Standard price must be 0 or more.');
   if(modalCtx.pn){
     const old=await getOne('parts',modalCtx.pn);
     if(!old) throw new Error('This part no longer exists.');
     if(pn!==old.pn && await getOne('parts',pn)) throw new Error('A part with this number already exists.');
-    const detail=diffText([['Part number',old.pn,pn],['Name',old.name,name],['Type',labelType(old.type),labelType(type)],['Minimum',old.min==null?'':old.min,min==null?'':min]]);
+    const oldPrice=old.price==null||old.price===''?'':old.price;
+    const detail=diffText([['Part number',old.pn,pn],['Name',old.name,name],['Type',labelType(old.type),labelType(type)],['Minimum',old.min==null?'':old.min,min==null?'':min],['Standard price',oldPrice,price==null?'':price]]);
     if(!detail) return NOCHANGE;
     const [stock,serials,incoming,rma]=await Promise.all([getAll('stock'),getAll('serials'),getAll('incoming'),getAll('rma')]);
     await batch(['parts','stock','serials','incoming','rma'],s=>{
-      s.parts.delete(old.pn);
-      s.parts.put({pn,name,type,min});
+      /* the old row is only removed when the number itself changes — for a
+         plain edit the put below updates the same row, and deleting it would
+         remove the part we just saved */
       if(pn!==old.pn){
+        s.parts.delete(old.pn);
         stock.filter(x=>x.pn===old.pn).forEach(x=>{ s.stock.delete([x.pn,x.storage]); s.stock.put(Object.assign({},x,{pn})); });
         serials.filter(x=>x.pn===old.pn).forEach(x=>s.serials.put(Object.assign({},x,{pn})));
         incoming.filter(x=>x.pn===old.pn).forEach(x=>s.incoming.put(Object.assign({},x,{pn})));
         rma.filter(x=>x.pn===old.pn).forEach(x=>s.rma.put(Object.assign({},x,{pn})));
       }
+      s.parts.put({pn,name,type,min,price});
     });
     await addHistory({action:'Part edited',pn,name,detail});
     return 'Saved part '+pn;
   }
   if(await getOne('parts',pn)) throw new Error('A part with this number already exists.');
-  await put('parts',{pn,name,type,min});
+  await put('parts',{pn,name,type,min,price});
   await addHistory({action:'Part added',pn,name,detail:labelType(type)+' part created'});
   return 'Added part '+pn;
 }
@@ -2078,10 +2374,19 @@ async function saveReceive(){
   if(!part) throw new Error('Choose a part.');
   let qty=null, sn=null;
   if(part.type==='serialised'){
-    sn=$('f_sn').value.trim();
-    if(!sn) throw new Error('Serial number is required.');
-    const declared=await rmaDeclared(sn); if(declared) throw new Error(rmaDeniedMsg(sn,declared));
-    if(await snTaken(sn,modalCtx.id||null)) throw new Error('Serial number “'+sn+'” already exists in the system.');
+    /* quantity is asked for serialised parts too: it decides how many serial number inputs are rendered */
+    const vals=snValues('f_snSet');
+    if(!vals.length) throw new Error('Enter at least one serial number.');
+    const seen=new Set();
+    for(const s of vals){
+      const key=s.toLowerCase();
+      if(seen.has(key)) throw new Error('Serial number “'+s+'” is entered twice.');
+      seen.add(key);
+      const declared=await rmaDeclared(s); if(declared) throw new Error(rmaDeniedMsg(s,declared));
+      if(await snTaken(s,modalCtx.id||null)) throw new Error('Serial number “'+s+'” already exists in the system.');
+    }
+    sn=vals.join(', ');
+    qty=vals.length;
   } else {
     qty=parseInt($('f_qty').value,10);
     if(!qty||qty<1) throw new Error('Enter a valid quantity.');
@@ -2132,34 +2437,59 @@ async function saveUse(){
 async function saveRMA(){
   const pn=$('f_pn').value, machine=$('f_machine').value.trim(), nw=$('f_new').value.trim(), order=$('f_order').value.trim();
   const sel=$('f_oldSel').value, old=(sel==='__manual__'?$('f_old').value:sel).trim();
-  if(!machine||!old||!nw) throw new Error('Machine, affected serial and replacement serial are required.');
-  if(old.toLowerCase()===nw.toLowerCase()) throw new Error('The replacement serial number must be different from the affected one.');
+  if(!machine||!old) throw new Error('Machine and the affected serial number are required.');
+  if(nw&&old.toLowerCase()===nw.toLowerCase()) throw new Error('The replacement serial number must be different from the affected one.');
   if(await rmaDeclared(old)) throw new Error('This serial number has already been logged in an RMA.');
-  const declared=await rmaDeclared(nw);
+  const declared=nw?await rmaDeclared(nw):null;
   if(declared) throw new Error(rmaDeniedMsg(nw,declared));
-  const nSer=await getOne('serials',nw), oSer=await getOne('serials',old), part=await getOne('parts',pn);
+  const nSer=nw?await getOne('serials',nw):null, oSer=await getOne('serials',old), part=await getOne('parts',pn);
   if(nSer&&nSer.status!=='in_stock') throw new Error('Serial number “'+nw+'” is already installed'+(nSer.machine?' in '+nSer.machine:'')+', so it can’t be the replacement.');
   if(nSer&&nSer.pn!==pn) throw new Error('“'+nw+'” belongs to a different part ('+nSer.pn+').');
   const storage=nSer?nSer.storage:'', t=now(), name=part?part.name:'';
   await batch(['serials','rma'],st=>{
     /* affected part: declared RMA, handed back to the client */
     st.serials.put(Object.assign({sn:old,pn,storage:'',machine,order:'',date:'',note:''},oSer||{},{status:'rma',rma:true}));
-    /* replacement from storage: installed normally, NOT an RMA */
-    st.serials.put(Object.assign({sn:nw,pn,storage,order,date:t,note:'Replacement for '+old},nSer||{},{status:'used',machine,rma:false,usedDate:t}));
-    st.rma.add({pn,order,old,new:nw,status:'Replaced',date:t,ts:Date.now(),machine,newCreated:!nSer});
+    /* replacement from storage: installed normally, NOT an RMA (only when given) */
+    if(nw) st.serials.put(Object.assign({sn:nw,pn,storage,order,date:t,note:'Replacement for '+old},nSer||{},{status:'used',machine,rma:false,usedDate:t}));
+    st.rma.add({pn,order,old,new:nw,status:nw?'Replaced':'Pending',date:t,ts:Date.now(),machine,newCreated:!!nw&&!nSer});
   });
-  await addHistory({action:'RMA: part removed',pn,name,sn:old,detail:'Serial '+old+' taken out of '+machine+' — declared RMA, replaced by '+nw,machine,order});
-  await addHistory({action:'Used',pn,name,sn:nw,detail:'Serial '+nw+' installed as replacement for '+old+' (RMA)',machine,storage,order});
-  return 'RMA saved: '+old+' → '+nw+' on '+machine;
+  await addHistory({action:'RMA: part removed',pn,name,sn:old,detail:nw?('Serial '+old+' taken out of '+machine+' — declared RMA, replaced by '+nw):('Serial '+old+' taken out of '+machine+' — declared RMA, replacement not decided yet'),machine,order});
+  if(nw) await addHistory({action:'Used',pn,name,sn:nw,detail:'Serial '+nw+' installed as replacement for '+old+' (RMA)',machine,storage,order});
+  return nw?('RMA saved: '+old+' → '+nw+' on '+machine):('RMA saved: '+old+' on '+machine+' — add the replacement serial later by editing the RMA');
 }
 async function saveRmaEdit(){
   const r=await getOne('rma',modalCtx.id); if(!r) throw new Error('This RMA no longer exists.');
   const order=$('f_order').value.trim(), status=$('f_status').value;
-  const detail=diffText([['Order',r.order,order],['Status',r.status,status]]);
+  const nw=$('f_new').value.trim(), prevNew=r.new||'';
+  if(nw&&nw.toLowerCase()===String(r.old||'').toLowerCase()) throw new Error('The replacement serial number must be different from the affected one.');
+  if(status==='Replaced'&&!nw) throw new Error('Enter the replacement serial number, or set the status to Pending or Closed.');
+  let nSer=null;
+  if(nw&&nw!==prevNew){
+    /* validate the new replacement before changing anything */
+    const declared=await rmaDeclared(nw);
+    if(declared) throw new Error(rmaDeniedMsg(nw,declared));
+    nSer=await getOne('serials',nw);
+    if(nSer&&nSer.status!=='in_stock') throw new Error('Serial number “'+nw+'” is already installed'+(nSer.machine?' in '+nSer.machine:'')+', so it can’t be the replacement.');
+    if(nSer&&nSer.pn!==r.pn) throw new Error('“'+nw+'” belongs to a different part ('+nSer.pn+').');
+  }
+  const detail=diffText([['Order',r.order||'',order],['Status',r.status||'',status],['Replacement',prevNew,nw]]);
   if(!detail) return NOCHANGE;
-  await put('rma',Object.assign({},r,{order,status}));
+  const t=now();
+  if(nw!==prevNew){
+    /* the old replacement goes back — or is removed if this RMA created it */
+    if(prevNew){
+      const prev=await getOne('serials',prevNew);
+      if(prev){
+        if(r.newCreated) await del('serials',prevNew);
+        else await put('serials',Object.assign({},prev,{status:'in_stock',machine:'',rma:false}));
+      }
+    }
+    if(nw) await put('serials',Object.assign({sn:nw,pn:r.pn,storage:nSer?nSer.storage:'',order:r.order||order,date:t,note:'Replacement for '+r.old},nSer||{},{status:'used',machine:r.machine||'',rma:false,usedDate:t}));
+  }
+  const newCreated=nw?(nw===prevNew?!!r.newCreated:!nSer):false;
+  await put('rma',Object.assign({},r,{order,status,new:nw,newCreated}));
   await addHistory({action:'RMA edited',pn:r.pn,sn:r.old,detail,machine:r.machine||'',order});
-  return 'Updated RMA';
+  return nw?('Updated RMA — replacement '+nw+' installed'):'Updated RMA';
 }
 async function saveEditStock(){
   const pn=modalCtx.pn, storage=modalCtx.storage;
@@ -2223,7 +2553,7 @@ async function saveSerial(){
 const SAVERS={part:savePart,storage:saveStorage,machine:saveMachine,group:saveGroup,receive:saveReceive,use:saveUse,rma:saveRMA,editstock:saveEditStock,movestock:saveMoveStock,moveserial:saveMoveSerial,serial:saveSerial,rmaedit:saveRmaEdit};
 
 /* ---------- export / import (CSV) ---------- */
-const CSV_COLS=['record_type','pn','name','type','group','storage','qty','sn','machine','status','order','old','new','date','ts','action','detail','note','doa','rma','used_date','new_created','min','wo','po','opened','closed','wotype','line_status','src'];
+const CSV_COLS=['record_type','pn','name','type','group','storage','qty','sn','machine','status','order','old','new','date','ts','action','detail','note','doa','rma','used_date','new_created','min','wo','po','opened','closed','wotype','line_status','src','price','line_id'];
 function csvEscape(v){ v=(v===null||v===undefined?'':v).toString(); return /[",\r\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; }
 /* Export backup + backup reminder logic commented out (buttons removed from the header)
 async function exportCSV(){
@@ -2231,16 +2561,16 @@ async function exportCSV(){
     const d=await loadAllData();
     const rows=[CSV_COLS.join(',')];
     const push=o=>rows.push(CSV_COLS.map(c=>csvEscape(o[c])).join(','));
-    d.parts.forEach(p=>push({record_type:'PART',pn:p.pn,name:p.name,type:p.type,min:p.min==null?'':p.min}));
+    d.parts.forEach(p=>push({record_type:'PART',pn:p.pn,name:p.name,type:p.type,min:p.min==null?'':p.min,price:p.price==null?'':p.price}));
     d.storages.forEach(s=>push({record_type:'STORAGE',name:s.name}));
     d.machineGroups.forEach(g=>push({record_type:'MACHINE_GROUP',name:g.name}));
     d.machines.forEach(m=>push({record_type:'MACHINE',name:m.name,group:m.group||''}));
     d.stock.forEach(s=>push({record_type:'STOCK',pn:s.pn,storage:s.storage,qty:s.qty}));
     d.serials.forEach(s=>push({record_type:'SERIAL',pn:s.pn,storage:s.storage,sn:s.sn,status:s.status,machine:s.machine,order:s.order,date:s.date,note:s.note,doa:s.doa?1:'',rma:s.rma?1:'',used_date:s.usedDate}));
-    d.incoming.forEach(i=>push({record_type:'INCOMING',pn:i.pn,storage:i.storage,order:i.order,qty:i.qty,sn:i.sn,status:i.status,date:i.date,note:i.note}));
+    d.incoming.forEach(i=>push({record_type:'INCOMING',pn:i.pn,storage:i.storage,order:i.order,qty:i.qty,sn:i.sn,status:i.status,date:i.date,note:i.note,wo:i.wo||'',line_id:i.line_id==null?'':i.line_id}));
     d.rma.forEach(r=>push({record_type:'RMA',pn:r.pn,order:r.order,old:r.old,new:r.new,machine:r.machine,status:r.status,date:r.date,ts:r.ts,new_created:r.newCreated?1:'',wo:r.wo,note:r.note}));
     d.workorders.forEach(w=>push({record_type:'WORKORDER',wo:w.wo,machine:w.machine,wotype:w.type,status:w.status,po:w.po,opened:w.opened,closed:w.closed,note:w.note,src:w.src}));
-    d.woLines.forEach(l=>push({record_type:'WO_LINE',wo:l.wo,pn:l.pn,name:l.name,qty:l.qty,line_status:l.status,sn:l.sn,note:l.note,src:l.src}));
+    d.woLines.forEach(l=>push({record_type:'WO_LINE',wo:l.wo,pn:l.pn,name:l.name,qty:l.qty,line_status:l.status,sn:l.sn,note:l.note,src:l.src,storage:l.storage||''}));
     d.history.forEach(h=>push({record_type:'HISTORY',pn:h.pn,name:h.name,sn:h.sn,date:h.date,ts:h.ts,action:h.action,detail:h.detail,machine:h.machine,storage:h.storage,order:h.order}));
     const blob=new Blob(['\uFEFF'+rows.join('\r\n')],{type:'text/csv;charset=utf-8'});
     const a=document.createElement('a');
@@ -2310,16 +2640,16 @@ function parseBackup(text){
   rows.slice(1).forEach(r=>{
     const o={}; head.forEach((h,i)=>{ o[h]=r[i]===undefined?'':r[i].trim(); });
     switch((o.record_type||'').trim().toUpperCase()){
-      case 'PART': if(o.pn&&o.name){ const p={pn:o.pn,name:o.name,type:TYPES.indexOf(o.type)>=0?o.type:'nonserialised'}; const m=intOrNull(o.min); if(m!==null&&m>=0) p.min=m; d.parts.push(p); } break;
+      case 'PART': if(o.pn&&o.name){ const p={pn:o.pn,name:o.name,type:TYPES.indexOf(o.type)>=0?o.type:'nonserialised'}; const m=intOrNull(o.min); if(m!==null&&m>=0) p.min=m; const pr=parseFloat(o.price); if(!isNaN(pr)&&pr>=0) p.price=pr; d.parts.push(p); } break;
       case 'STORAGE': if(o.name) d.storages.push({name:o.name}); break;
       case 'MACHINE_GROUP': if(o.name) d.machineGroups.push({name:o.name}); break;
       case 'MACHINE': if(o.name) d.machines.push({name:o.name,group:o.group||''}); break;
       case 'STOCK': if(o.pn&&o.storage) d.stock.push({pn:o.pn,storage:o.storage,qty:parseInt(o.qty,10)||0}); break;
       case 'SERIAL': if(o.sn&&o.pn) d.serials.push({sn:o.sn,pn:o.pn,storage:o.storage,status:o.status||'in_stock',machine:o.machine||'',order:o.order||'',date:o.date||'',note:o.note||'',doa:o.doa==='1',rma:o.rma==='1',usedDate:o.used_date||''}); break;
-      case 'INCOMING': if(o.pn){ const i={pn:o.pn,storage:o.storage,order:o.order,qty:o.sn?null:(parseInt(o.qty,10)||1),sn:o.sn||null,status:o.status||'Waiting',date:o.date||''}; if(o.note) i.note=o.note; d.incoming.push(i); } break;
+      case 'INCOMING': if(o.pn){ const i={pn:o.pn,storage:o.storage,order:o.order,qty:o.sn?(intOrNull(o.qty)):(parseInt(o.qty,10)||1),sn:o.sn||null,status:o.status||'Waiting',date:o.date||''}; if(o.note) i.note=o.note; if(o.wo) i.wo=o.wo; const lid=intOrNull(o.line_id); if(lid!==null) i.line_id=lid; d.incoming.push(i); } break;
       case 'RMA': if(o.old||o.new||o.order) d.rma.push({pn:o.pn||'',order:o.order||'',old:o.old||'',new:o.new||'',machine:o.machine||'',status:o.status||'Replaced',date:o.date||'',ts:parseInt(o.ts,10)||0,newCreated:o.new_created==='1',wo:o.wo||'',note:o.note||''}); break;
-      case 'WORKORDER': if(o.wo) d.workorders.push({wo:o.wo.toUpperCase(),machine:o.machine||'',type:o.wotype||'Corrective',status:o.status||'Open',po:o.po||'',opened:o.opened||'',closed:o.closed||'',note:o.note||'',src:o.src||''}); break;
-      case 'WO_LINE': if(o.wo&&o.pn) d.woLines.push({wo:o.wo.toUpperCase(),pn:o.pn,name:o.name||'',qty:intOrNull(o.qty),status:o.line_status||'Needed',sn:o.sn||'',note:o.note||'',src:o.src||''}); break;
+      case 'WORKORDER': if(o.wo) d.workorders.push({wo:o.wo.toUpperCase(),machine:o.machine||'',type:o.wotype||'Corrective',status:o.status||'In progress',po:o.po||'',opened:o.opened||'',closed:o.closed||'',note:o.note||'',src:o.src||''}); break;
+      case 'WO_LINE': if(o.wo&&o.pn) d.woLines.push({wo:o.wo.toUpperCase(),pn:o.pn,name:o.name||'',qty:intOrNull(o.qty),status:o.line_status||'Waiting part',sn:o.sn||'',note:o.note||'',src:o.src||'',storage:o.storage||''}); break;
       case 'HISTORY': d.history.push({pn:o.pn||'—',name:o.name||'',sn:o.sn||'',action:o.action||'',detail:o.detail||'',machine:o.machine||'',storage:o.storage||'',order:o.order||'',date:o.date||'',ts:parseInt(o.ts,10)||parseHistDate(o.date)||0}); break;
     }
   });
@@ -2431,7 +2761,8 @@ const ACTIONS={
   editRma:d=>openModal('rmaedit',{id:+d.id}),
   delRma:d=>deleteRma(+d.id),
   histType:d=>{ histCatKey=d.key; applyHistoryFilters(); },
-  histRange:d=>{ histRangeKey=d.key; applyHistoryFilters(); }
+  histRange:d=>{ histRangeKey=d.key; applyHistoryFilters(); },
+  discardDraft:()=>discardDraftForm()
 };
 document.addEventListener('click',e=>{
   const el=e.target.closest('[data-act]');
@@ -2444,7 +2775,7 @@ document.addEventListener('keydown',e=>{
   if(e.key==='Escape'){
     if(confirmResolve) confirmResolve(false);
     else if($('scannerOverlay').classList.contains('open')) closeScanner();
-    else if($('modalOverlay').classList.contains('open')) closeModal();
+    else if($('modalOverlay').classList.contains('open')) closeModal(true);
     return;
   }
   if((e.key==='Enter'||e.key===' ') && e.target.matches && e.target.matches('[role=button][data-act]')){
@@ -2492,17 +2823,19 @@ $('refreshBtn').addEventListener('click',async e=>{
   catch(err){ toast('Refresh failed: '+((err&&err.message)||err),'error'); }
   finally{ b.disabled=false; }
 });
-$('modalOverlay').addEventListener('click',e=>{ if(e.target.id==='modalOverlay') closeModal(); });
+$('modalOverlay').addEventListener('click',e=>{ if(e.target.id==='modalOverlay') closeModal(true); });
 $('scannerOverlay').addEventListener('click',e=>{ if(e.target.id==='scannerOverlay') closeScanner(); });
 
 /* ======================================================================
    v4 additions: work orders, minimum stock, data check, merge import
    ====================================================================== */
 const STORE_NAMES=['parts','storages','stock','serials','incoming','rma','history','machines','machineGroups','workorders','woLines'];
-const WO_STATUSES=['Open','In progress','Waiting parts','Stopped','Complete','Cancelled','Unknown'];
+const WO_STATUSES=['In progress','Work complete','Work stopped'];
 const WO_TYPES=['Corrective','Preventive','Other'];
-const LINE_STATUSES=['Listed','Needed','Ordered','Awaiting part','Received','Consumed','Replaced','Defect returned'];
+const LINE_STATUSES=['Waiting part','Received'];
 let woFilter='active', woMachineFilter='', woRangeKey='all', woExpandedWO=null;
+/* the part and serial lists loaded into the part order (work order line) form */
+let woLineParts=[], woLineSerials=[];
 const WO_RANGES=[['all','Any time'],['today','Today'],['7d','Last 7 days'],['30d','Last 30 days'],['90d','Last 90 days'],['year','This year']];
 /* on desktop the work order details open inline under the row, on smaller screens in a modal */
 function woDetailIsInline(){ try{ return window.matchMedia('(min-width:821px)').matches; }catch(e){ return window.innerWidth>820; } }
@@ -2516,9 +2849,19 @@ function woRangeMatch(w,key){
   const days=parseInt(key,10);
   return !isNaN(days)&&ts>=Date.now()-days*864e5;
 }
-const woIsOpen=w=>['Complete','Cancelled','Unknown'].indexOf(w.status)<0;
+const woIsOpen=w=>['Work complete','Complete','Cancelled','Unknown'].indexOf(w.status)<0;
 function fmtD(iso){ const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(iso||''); return m?m[3]+'/'+m[2]+'/'+m[1]:(iso||'—'); }
-function woTag(st){ const cls={Complete:'tag-installed','Waiting parts':'tag-warn',Stopped:'tag-rma','In progress':'tag-info',Open:'tag-info'}[st]||''; return '<span class="tag '+cls+'" style="margin-left:0">'+esc(st||'—')+'</span>'; }
+/* whole days the work order has been open, counting from 0 on the day it was opened.
+   Once it is closed the count stops on the closed date. */
+function woDaysOpen(w){
+  const start=Date.parse(String((w.opened||'').slice(0,10))+'T00:00:00');
+  if(isNaN(start)) return 0;
+  let end=Date.now();
+  if(w.closed){ const c=Date.parse(String(w.closed.slice(0,10))+'T00:00:00'); if(!isNaN(c)) end=c; }
+  const days=Math.floor((new Date(end).setHours(0,0,0,0)-new Date(start).setHours(0,0,0,0))/864e5);
+  return days>0?days:0;
+}
+function woTag(st){ const cls={'Work complete':'tag-installed','Work stopped':'tag-rma','In progress':'tag-info',Complete:'tag-installed','Waiting parts':'tag-warn',Stopped:'tag-rma',Open:'tag-info'}[st]||''; return '<span class="tag '+cls+'" style="margin-left:0">'+esc(st||'—')+'</span>'; }
 function optList(list,cur){ const l=list.slice(); if(cur&&l.indexOf(cur)<0) l.push(cur); return l.map(v=>'<option value="'+esc(v)+'"'+(v===cur?' selected':'')+'>'+esc(v)+'</option>').join(''); }
 async function infoDialog(title,message){
   const c=$('confirmCancel'); c.style.display='none';
@@ -2527,17 +2870,33 @@ async function infoDialog(title,message){
 
 /* ---------- work orders view ---------- */
 /* the work order details (info, part lines, usage) — used inline on desktop and in the modal on small screens */
+/* the line status gets a colour so it can be scanned at a glance */
+function woLineTag(st){
+  const cls={'Waiting part':'tag-warn','Received':'tag-installed'}[st]||'';
+  return '<span class="tag '+cls+'" style="margin-left:0">'+esc(st||'—')+'</span>';
+}
+/* lines waiting for their part always come first, then the received ones (oldest first) */
+const LINE_ORDER={'Waiting part':0,'Received':1};
+function lineSortKey(l){ return LINE_ORDER[l.status]==null?2:LINE_ORDER[l.status]; }
+/* today as a yyyy-mm-dd value for the date inputs */
+function todayISO(){ const d=new Date(); const p=n=>String(n).padStart(2,'0'); return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate()); }
+/* completing the work order stamps today into Closed — it stays editable afterwards */
+function onWoStatusChange(){
+  const st=$('f_status'), closed=$('f_closed');
+  if(!st||!closed) return;
+  if(st.value==='Work complete'&&!closed.value) closed.value=todayISO();
+}
 async function woDetailHTML(wo){
   const [w,lines,hist]=await Promise.all([getOne('workorders',wo),getAll('woLines'),getAll('history')]);
   if(!w) return '<p class="hint">This work order no longer exists.</p>';
-  const ls=lines.filter(l=>l.wo===w.wo).sort((a,b)=>a.id-b.id);
+  const ls=lines.filter(l=>l.wo===w.wo).sort((a,b)=>lineSortKey(a)-lineSortKey(b)||a.id-b.id);
   const used=hist.filter(h=>h.order===w.wo&&/^used|^rma/i.test(h.action||''));
   const kv=(k,v)=>'<div><span>'+k+'</span><b>'+v+'</b></div>';
-  return '<div class="info-block">'+kv('Machine',esc(w.machine||'—'))+kv('Type',esc(w.type||'—'))+kv('Status',woTag(w.status))+kv('Opened',esc(fmtD(w.opened)))+kv('Closed',esc(fmtD(w.closed)))+kv('Order / PO / RMA',esc(w.po||'—'))+'</div>'
+  return '<div class="info-block">'+kv('Machine',esc(w.machine||'—'))+kv('Type',esc(w.type||'—'))+kv('Status',woTag(w.status))+kv('Opened',esc(fmtD(w.opened)))+kv('Days open',woDaysOpen(w))+kv('Closed',esc(fmtD(w.closed)))+kv('Part order',esc(w.po||'—'))+'</div>'
     +(w.note?'<p class="helper-note" style="margin:0 0 12px"><b>Note:</b> '+esc(w.note)+'</p>':'')
     +'<div class="toolbar" style="margin:6px 0 8px"><h3 class="section-title" style="margin:0;font-size:14px">Parts on this work order</h3><button type="button" class="btn btn-ghost btn-sm" data-act="woAddLine" data-wo="'+esc(w.wo)+'">+ Add line</button></div>'
-    +'<div class="table-scroll"><table class="history-table"><thead><tr><th>Part</th><th>Name</th><th>Qty</th><th>Status</th><th>Serials / note</th><th></th></tr></thead><tbody>'
-    +(ls.length?ls.map(l=>'<tr><td class="mono">'+esc(l.pn)+'</td><td>'+esc(l.name||'')+'</td><td class="mono">'+esc(l.qty==null?'—':l.qty)+'</td><td>'+esc(l.status||'—')+'</td><td>'+esc([l.sn,l.note].filter(Boolean).join(' · ')||'—')+'</td><td class="actions-cell"><div class="row-actions">'+iconBtn('woEditLine',{id:l.id},ICON_EDIT,'Edit line')+iconBtn('woDelLine',{id:l.id},ICON_TRASH,'Delete line',true)+'</div></td></tr>').join(''):emptyRow(6,'No parts on this work order yet.'))
+    +'<div class="table-scroll"><table class="history-table"><thead><tr><th>Part</th><th>Name</th><th>Qty</th><th>Status</th><th>Storage</th><th>Serials / note</th><th></th></tr></thead><tbody>'
+    +(ls.length?ls.map(l=>'<tr><td class="mono">'+esc(l.pn)+'</td><td>'+esc(l.name||'')+'</td><td class="mono">'+esc(l.qty==null?'—':l.qty)+'</td><td>'+woLineTag(l.status)+'</td><td>'+esc(l.storage||'—')+'</td><td>'+esc([l.sn,l.note].filter(Boolean).join(' · ')||'—')+'</td><td class="actions-cell"><div class="row-actions">'+iconBtn('woEditLine',{id:l.id},ICON_EDIT,'Edit line')+iconBtn('woDelLine',{id:l.id},ICON_TRASH,'Delete line',true)+'</div></td></tr>').join(''):emptyRow(7,'No parts on this work order yet.'))
     +'</tbody></table></div>'
     +(used.length?'<p class="helper-note" style="margin-top:12px">Usage logged against this work order: '+used.map(h=>esc(h.pn)+' ('+esc(h.date)+')').join(', ')+'</p>':'')
     +(w.src?'<p class="helper-note" style="margin-top:12px">Imported from: '+esc(w.src)+'</p>':'');
@@ -2550,7 +2909,8 @@ async function renderWorkOrders(){
   const names=[...new Set([...machines.map(m=>m.name),...wos.map(w=>w.machine).filter(Boolean)])].sort();
   $('woMachine').innerHTML='<option value="">All machines</option>'+names.map(n=>'<option value="'+esc(n)+'"'+(n===woMachineFilter?' selected':'')+'>'+esc(n)+'</option>').join('');
   const base=wos.filter(w=>(!woMachineFilter||w.machine===woMachineFilter)&&(!q||([w.wo,w.machine,w.po,w.note,w.status,w.type].join(' ')+(hay[w.wo]||'')).toLowerCase().includes(q)));
-  const chips=[['all','All'],['active','Active']].concat(WO_STATUSES.map(s=>[s,s]));
+  const chipStatuses=[...new Set(WO_STATUSES.concat(wos.map(w=>w.status).filter(Boolean)))];
+  const chips=[['all','All'],['active','Active']].concat(chipStatuses.map(s=>[s,s]));
   const ok=(w,k)=>k==='all'||(k==='active'?woIsOpen(w):w.status===k);
   $('woChips').innerHTML=chips.map(c=>'<button type="button" class="fchip'+(woFilter===c[0]?' active':'')+'" data-act="woFilter" data-key="'+esc(c[0])+'">'+esc(c[1])+'<span class="n">'+base.filter(w=>ok(w,c[0])).length+'</span></button>').join('');
   $('woRangeChips').innerHTML='<span class="filter-label">When</span>'+WO_RANGES.map(c=>'<button type="button" class="fchip'+(woRangeKey===c[0]?' active':'')+'" data-act="woRange" data-key="'+esc(c[0])+'">'+esc(c[1])+'<span class="n">'+base.filter(w=>ok(w,woFilter)&&woRangeMatch(w,c[0])).length+'</span></button>').join('');
@@ -2559,12 +2919,13 @@ async function renderWorkOrders(){
   const html=await Promise.all(rows.map(async w=>{
     const open=woExpandedWO===w.wo;
     let out='<tr class="clickrow'+(open?' open':'')+'" data-act="woOpen" data-wo="'+esc(w.wo)+'" aria-expanded="'+open+'"><td><span class="id-cell mono"><span class="chev">'+ICON_CHEV+'</span>'+esc(w.wo)+copyBtn(w.wo)+'</span></td><td>'+esc(w.machine||'—')+'</td><td>'+esc(w.type||'—')+'</td><td>'+woTag(w.status)+'</td><td class="nowrap">'+esc(fmtD(w.opened))+'</td><td class="nowrap">'+esc(fmtD(w.closed))+'</td><td class="mono">'+esc(w.po||'—')+'</td><td class="mono">'+(cnt[w.wo]||0)+'</td>'
+      +'<td class="mono nowrap" title="Days this work order has been open">'+woDaysOpen(w)+'</td>'
       +'<td class="actions-cell"><div class="row-actions">'+iconBtn('woEdit',{wo:w.wo},ICON_EDIT,'Edit work order')+iconBtn('woDel',{wo:w.wo},ICON_TRASH,'Delete work order',true)+'</div></td></tr>';
-    if(open) out+='<tr class="wo-expand-row"><td colspan="9"><div class="wo-expand-inner">'+await woDetailHTML(w.wo)+'</div></td></tr>';
+    if(open) out+='<tr class="wo-expand-row"><td colspan="10"><div class="wo-expand-inner">'+await woDetailHTML(w.wo)+'</div></td></tr>';
     return out;
   }));
   $('woBody').innerHTML=html.join('')
-    ||emptyRow(9,wos.length?'No work orders match your search or filter.':'No work orders yet. Add one to start tracking repairs and maintenance.');
+    ||emptyRow(10,wos.length?'No work orders match your search or filter.':'No work orders yet. Add one to start tracking repairs and maintenance.');
 }
 /* refresh the open inline details after a change (falls back to the modal on small screens) */
 async function refreshWoDetail(wo){
@@ -2573,11 +2934,11 @@ async function refreshWoDetail(wo){
 }
 
 /* ---------- work order modals (wrapped around the existing openModal) ---------- */
-const WO_MODALS={wo:['Add work order','Edit work order','Add work order','Save changes'],woline:['Add line','Edit line','Add line','Save changes'],wodetail:['Work order','','Close','']};
+const WO_MODALS={wo:['Add work order','Edit work order','Add work order','Save changes'],woline:['Add part order line','Edit line','Add line','Save changes'],wodetail:['Work order','','Close','']};
 const _openModalBase=openModal;
 openModal=async function(type,ctx){
   if(!WO_MODALS[type]) return _openModalBase(type,ctx);
-  ctx=ctx||{}; modalType=type; modalCtx=ctx;
+  ctx=ctx||{}; modalType=type; modalCtx=ctx; draftKey='';
   const body=$('modalBody');
   const block=msg=>{ body.innerHTML='<p class="hint">'+esc(msg)+'</p>'; $('modalSubmitBtn').style.display='none'; $('modalCancelBtn').textContent='Close'; $('modalOverlay').classList.add('open'); };
   $('modalSubmitBtn').style.display=''; $('modalCancelBtn').textContent='Cancel';
@@ -2587,27 +2948,39 @@ openModal=async function(type,ctx){
     $('modalTitle').textContent=ctx.wo?'Edit work order':'Add work order';
     $('modalSubmitBtn').textContent=ctx.wo?'Save changes':'Add work order';
     const names=machines.map(m=>m.name).sort();
-    const cur=w||{machine:ctx.machine||'',type:'Corrective',status:'Open'};
+    const cur=w||{machine:ctx.machine||'',type:'Corrective',status:'In progress'};
     body.innerHTML='<div class="field"><label>Work order number</label><input id="f_wo" required value="'+esc(w?w.wo:'')+'" placeholder="WO-01234567"></div>'
       +'<div class="field"><label>Machine</label><select id="f_machine"><option value="">— none —</option>'+optList(names,cur.machine)+'</select></div>'
       +'<div class="field"><label>Type</label><select id="f_type">'+optList(WO_TYPES,cur.type)+'</select></div>'
-      +'<div class="field"><label>Status</label><select id="f_status">'+optList(WO_STATUSES,cur.status)+'</select></div>'
+      +'<div class="field"><label>Status</label><select id="f_status" onchange="onWoStatusChange()">'+optList(WO_STATUSES,cur.status)+'</select></div>'
       +'<div class="field"><label>Opened</label><input id="f_opened" type="date" value="'+esc(w?w.opened||'':'')+'"></div>'
-      +'<div class="field"><label>Closed</label><input id="f_closed" type="date" value="'+esc(w?w.closed||'':'')+'"></div>'
-      +'<div class="field"><label>Part order / PO / RMA ref</label><input id="f_po" value="'+esc(w?w.po||'':'')+'"></div>'
+      +'<div class="field"><label>Closed</label><input id="f_closed" type="date" value="'+esc(w?w.closed||'':'')+'"><p class="helper-note">Fills in today automatically when the status is “Work complete” — change it by hand if the work finished on another day.</p></div>'
+      +'<div class="field"><label>Part order number</label><input id="f_po" value="'+esc(w?w.po||'':'')+'" placeholder="Filled automatically when you add the first line"></div>'
       +'<div class="field"><label>Note</label><input id="f_note" value="'+esc(w?w.note||'':'')+'"></div>';
   } else if(type==='woline'){
-    const [parts,l]=await Promise.all([getAll('parts'),ctx.id?getOne('woLines',ctx.id):Promise.resolve(null)]);
+    const [parts,l,storages,serials,w]=await Promise.all([getAll('parts'),ctx.id?getOne('woLines',ctx.id):Promise.resolve(null),getAll('storages'),getAll('serials'),getOne('workorders',ctx.wo)]);
     if(ctx.id&&!l) return block('This line no longer exists.');
-    $('modalTitle').textContent=ctx.id?'Edit line':'Add line';
+    if(!storages.length) return block('Add a storage first — every line has to say which storage the part goes into.');
+    $('modalTitle').textContent=ctx.id?'Edit line':'Add part order line';
     $('modalSubmitBtn').textContent=ctx.id?'Save changes':'Add line';
-    const cur=l||{status:'Listed'};
-    body.innerHTML='<div class="field"><label>Part number</label><input id="f_pn" list="woPartList" required value="'+esc(l?l.pn:'')+'"><datalist id="woPartList">'+parts.map(p=>'<option value="'+esc(p.pn)+'">'+esc(p.name)+'</option>').join('')+'</datalist></div>'
+    const cur=l||{status:'Waiting part'};
+    woLineParts=parts.slice().sort((a,b)=>String(a.pn).localeCompare(String(b.pn)));
+    woLineSerials=serials;
+    const opts=woLineParts.map(p=>'<option value="'+esc(p.pn)+'" data-type="'+p.type+'" data-search="'+esc((p.pn+' '+p.name).toLowerCase())+'">'+esc(p.pn)+' — '+esc(p.name)+'</option>').join('');
+    body.innerHTML='<div class="field"><label for="f_filter">Find a part</label><input id="f_filter" type="search" placeholder="Filter the list by part number or name" oninput="filterWoLineParts()"></div>'
+      +'<div class="field"><div class="pick-row">'
+      +'<input id="f_pn" required placeholder="Part number" value="'+esc(l?l.pn:'')+'" oninput="onWoLinePnChanged()" onchange="onWoLinePnChanged()">'
+      +'<select id="f_pick" aria-label="Choose a part" onchange="onWoLinePick()"><option value="">Choose a part…</option>'+opts+'</select>'
+      +'</div>'
+      +'<p class="helper-note" id="f_pickNote">Filter first to narrow the list down, type a part number that isn’t in the list yet, or pick one on the right.</p></div>'
+      +'<div class="field" id="f_typeWrap" style="display:none"><label>Part type (this part number isn’t in the parts list yet)</label><select id="f_type" onchange="renderWoLineSnRows()"><option value="nonserialised">Non-serialised</option><option value="serialised">Serialised</option><option value="consumable">Consumable</option></select><p class="helper-note" style="margin-top:6px">Choose serialised to get one serial number input per unit. The part is added to the parts list when the line is saved.</p></div>'
       +'<div class="field"><label>Name</label><input id="f_name" value="'+esc(l?l.name||'':'')+'" placeholder="Filled from the part if left empty"></div>'
-      +'<div class="field"><label>Quantity</label><input id="f_qty" type="number" min="0" value="'+esc(l&&l.qty!=null?l.qty:'1')+'"></div>'
-      +'<div class="field"><label>Line status</label><select id="f_status">'+optList(LINE_STATUSES,cur.status)+'</select></div>'
-      +'<div class="field"><label>Serial numbers (new / defect)</label><input id="f_sn" value="'+esc(l?l.sn||'':'')+'" placeholder="e.g. new 44800-4N / defect 14715-3P"></div>'
+      +'<div class="field"><label>Quantity</label><input id="f_qty" type="number" min="1" value="'+esc(l&&l.qty!=null?l.qty:'1')+'" oninput="onWoLineQtyChange()"></div>'
+      +'<div class="field" id="f_snWrap" style="display:none"><label>Serial numbers</label><div id="f_snSet"></div><p class="helper-note">One input per unit — the quantity decides how many you get. Type or scan a serial, or choose one that is already in Stocktrack (units tagged RMA are hidden).</p></div>'
+      +'<div class="field"><label>Storage</label><select id="f_storage">'+storages.map(s=>'<option value="'+esc(s.name)+'"'+(l&&l.storage===s.name?' selected':'')+'>'+esc(s.name)+'</option>').join('')+'</select></div>'
+      +'<div class="field"><label>Line status</label><select id="f_status">'+optList(LINE_STATUSES,cur.status)+'</select><p class="helper-note" style="margin-top:6px">Waiting part puts this line into <b>Incoming</b> automatically as part order <b>'+esc(w&&w.po?w.po:'PO-…')+'</b>.</p></div>'
       +'<div class="field"><label>Note</label><input id="f_note" value="'+esc(l?l.note||'':'')+'"></div>';
+    await onWoLinePnChanged({prefill:splitSns(l&&l.sn?l.sn:'')});
   } else {
     /* small screens only — on desktop the details open inline under the row */
     const w=await getOne('workorders',ctx.wo);
@@ -2616,22 +2989,98 @@ openModal=async function(type,ctx){
     $('modalSubmitBtn').style.display='none'; $('modalCancelBtn').textContent='Close';
     body.innerHTML=await woDetailHTML(ctx.wo);
   }
-  enhanceInputs(body); $('modalOverlay').classList.add('open'); focusFirstField();
+  enhanceInputs(body);
+  await initDraft();
+  $('modalOverlay').classList.add('open'); focusFirstField();
 };
+
+/* ---------- part order line form: filter, part picker and serial number rows ---------- */
+function filterWoLineParts(){
+  const sel=$('f_pick'); if(!sel) return;
+  const f=(($('f_filter')||{}).value||'').trim().toLowerCase();
+  const pnExact=(($('f_pn')||{}).value||'').trim();
+  const pn=pnExact.toLowerCase();
+  const pnIsExact=Array.from(sel.options).some(o=>o.value&&o.value===pnExact);
+  let visible=0;
+  Array.from(sel.options).forEach(o=>{
+    if(!o.value) return;
+    const hay=o.dataset.search||'';
+    const show=(!f||hay.includes(f))&&(!pn||pnIsExact||hay.includes(pn));
+    o.hidden=!show;
+    if(show) visible++;
+  });
+  /* the part number field is the source of truth, so mirror it into the picker */
+  sel.value=pnIsExact?pnExact:'';
+  const note=$('f_pickNote');
+  if(note) note.textContent=!visible&&!f&&!pn
+    ?'No parts yet — type a part number to add one.'
+    :!visible
+      ?'Nothing matches “'+(f||pnExact)+'”. Type the part number above and it will be added to your parts when the line is saved.'
+      :'Filter first to narrow the list down, type a part number that isn’t in the list yet, or pick one on the right.';
+}
+function onWoLinePick(){
+  const sel=$('f_pick'); if(!sel||!sel.value) return;
+  $('f_pn').value=sel.value;
+  onWoLinePnChanged();
+}
+function woLinePart(pn){ return woLineParts.find(p=>p.pn===pn)||null; }
+function woLineIsSerial(){
+  const p=woLinePart((($('f_pn')||{}).value||'').trim());
+  if(p) return p.type==='serialised';
+  const t=$('f_type');
+  return !!t&&t.value==='serialised';
+}
+/* serial numbers of this part that are already in Stocktrack, never the RMA units, sorted by S/N */
+function woLineExistingSns(){
+  const pn=(($('f_pn')||{}).value||'').trim();
+  return woLineSerials.filter(s=>s.pn===pn&&!s.rma).map(s=>String(s.sn)).sort((a,b)=>a.localeCompare(b));
+}
+function renderWoLineSnRows(prefill){
+  const wrap=$('f_snWrap'); if(!wrap) return;
+  const serial=woLineIsSerial();
+  wrap.style.display=serial?'block':'none';
+  const set=$('f_snSet');
+  if(!serial){ if(set) set.innerHTML=''; return; }
+  snRowSet('f_snSet',($('f_qty')||{}).value,woLineExistingSns(),prefill&&prefill.length?prefill:null,true);
+}
+function onWoLineQtyChange(){
+  const wrap=$('f_snWrap');
+  if(!wrap||wrap.style.display==='none') return;
+  renderWoLineSnRows(snValues('f_snSet'));
+}
+async function onWoLinePnChanged(prefill){
+  const pn=(($('f_pn')||{}).value||'').trim();
+  const part=woLinePart(pn);
+  const tw=$('f_typeWrap'); if(tw) tw.style.display=part?'none':'block';
+  const name=$('f_name');
+  if(part&&name&&!name.value.trim()) name.value=part.name||'';
+  filterWoLineParts();
+  renderWoLineSnRows(prefill);
+}
 
 async function saveWo(){
   const wo=$('f_wo').value.trim().toUpperCase();
   if(!wo) throw new Error('Work order number is required.');
   const rec={wo,machine:$('f_machine').value,type:$('f_type').value,status:$('f_status').value,opened:$('f_opened').value,closed:$('f_closed').value,po:$('f_po').value.trim(),note:$('f_note').value.trim()};
+  /* a completed work order always gets a closing date — today, unless one was typed */
+  if(rec.status==='Work complete'&&!rec.closed) rec.closed=todayISO();
   if(rec.opened&&rec.closed&&rec.closed<rec.opened) throw new Error('Closed date can’t be before the opened date.');
   if(modalCtx.wo){
     const old=await getOne('workorders',modalCtx.wo); if(!old) throw new Error('This work order no longer exists.');
     if(wo!==old.wo&&await getOne('workorders',wo)) throw new Error('A work order with this number already exists.');
     const detail=diffText([['Number',old.wo,wo],['Machine',old.machine,rec.machine],['Type',old.type,rec.type],['Status',old.status,rec.status],['Opened',old.opened||'',rec.opened],['Closed',old.closed||'',rec.closed],['Order',old.po||'',rec.po],['Note',old.note||'',rec.note]]);
     if(!detail) return NOCHANGE;
-    const lines=(await getAll('woLines')).filter(l=>l.wo===old.wo);
-    await batch(['workorders','woLines'],s=>{
-      if(wo!==old.wo){ s.workorders.delete(old.wo); lines.forEach(l=>s.woLines.put(Object.assign({},l,{wo}))); }
+    const [lines,inc]=await Promise.all([getAll('woLines'),getAll('incoming')]);
+    const mine=lines.filter(l=>l.wo===old.wo);
+    const mineInc=inc.filter(i=>i.wo===old.wo);
+    await batch(['workorders','woLines','incoming'],s=>{
+      if(wo!==old.wo){
+        s.workorders.delete(old.wo);
+        mine.forEach(l=>s.woLines.put(Object.assign({},l,{wo})));
+        mineInc.forEach(i=>s.incoming.put(Object.assign({},i,{wo})));
+      }
+      /* a new part order number is passed on to the entries it created */
+      if(rec.po&&rec.po!==(old.po||'')) mineInc.filter(i=>i.status==='Waiting').forEach(i=>s.incoming.put(Object.assign({},i,{order:rec.po})));
       s.workorders.put(Object.assign({},old,rec));
     });
     await addHistory({action:'Work order edited',pn:'—',detail,machine:rec.machine,order:wo});
@@ -2645,37 +3094,135 @@ async function saveWo(){
 async function saveWoLine(){
   const pn=$('f_pn').value.trim();
   if(!pn) throw new Error('Part number is required.');
-  const part=await getOne('parts',pn);
+  let part=await getOne('parts',pn);
+  const typedName=$('f_name').value.trim();
+  /* a part number typed straight into the form is added to the parts list */
+  if(!part) part=await ensurePart(pn,typedName||pn,$('f_type')?$('f_type').value:'nonserialised');
   const qtyRaw=$('f_qty').value.trim(), qty=qtyRaw===''?null:parseInt(qtyRaw,10);
-  if(qty!==null&&(isNaN(qty)||qty<0)) throw new Error('Quantity must be 0 or more.');
-  const rec={wo:modalCtx.wo,pn,name:$('f_name').value.trim()||(part?part.name:''),qty,status:$('f_status').value,sn:$('f_sn').value.trim(),note:$('f_note').value.trim()};
+  if(qty===null||isNaN(qty)||qty<1) throw new Error('Enter a quantity of 1 or more.');
+  const storage=$('f_storage').value;
+  const status=$('f_status').value;
+  if(!storage) throw new Error('Choose a storage — the parts have to go somewhere.');
+  let sn='';
+  if(part.type==='serialised'){
+    const vals=snValues('f_snSet');
+    const seen=new Set();
+    for(const s of vals){
+      const key=s.toLowerCase();
+      if(seen.has(key)) throw new Error('Serial number “'+s+'” is entered twice.');
+      seen.add(key);
+    }
+    sn=vals.join(', ');
+  }
+  const rec={wo:modalCtx.wo,pn,name:typedName||part.name,qty,status,sn,storage,note:$('f_note').value.trim()};
   if(modalCtx.id){
     const old=await getOne('woLines',modalCtx.id); if(!old) throw new Error('This line no longer exists.');
     rec.wo=old.wo;
-    const detail=diffText([['Part',old.pn,pn],['Qty',old.qty,qty],['Status',old.status,rec.status],['Serials',old.sn||'',rec.sn],['Note',old.note||'',rec.note]]);
+    const detail=diffText([['Part',old.pn,pn],['Qty',old.qty,qty],['Status',old.status,rec.status],['Storage',old.storage||'',rec.storage],['Serials',old.sn||'',rec.sn],['Note',old.note||'',rec.note]]);
     if(!detail) return NOCHANGE;
-    await put('woLines',Object.assign({},old,rec));
+    const saved=Object.assign({},old,rec);
+    await put('woLines',saved);
+    await syncWoLineIncoming(saved);
+    /* a line that just came in as Received puts its parts into storage */
+    if(old.status!=='Received'&&rec.status==='Received'){
+      await commitLineReceive(saved,part);
+      await addHistory({action:'Received',pn,name:rec.name,sn:rec.sn||'',detail:(rec.sn?('Serial '+rec.sn):('Qty '+qty))+' received into '+rec.storage+' — line on '+rec.wo,storage:rec.storage,order:rec.wo});
+    }
     await addHistory({action:'Work order line edited',pn,name:rec.name,detail,order:rec.wo});
     return 'Saved line for '+pn;
   }
-  await addRec('woLines',rec);
+  const id=await addRec('woLines',rec);
+  const line=Object.assign({id},rec);
+  await syncWoLineIncoming(line);
+  if(rec.status==='Received'){
+    await commitLineReceive(line,part);
+    await addHistory({action:'Received',pn,name:rec.name,sn:rec.sn||'',detail:(rec.sn?('Serial '+rec.sn):('Qty '+qty))+' received into '+rec.storage+' — line on '+rec.wo,storage:rec.storage,order:rec.wo});
+  }
   await addHistory({action:'Work order line added',pn,name:rec.name,detail:(qty==null?'':qty+' × ')+rec.status,order:rec.wo});
-  return 'Added '+pn+' to '+rec.wo;
+  return 'Added '+pn+' to '+rec.wo+(line.status==='Waiting part'?' · logged in Incoming':'');
+}
+/* A line that comes in as Received puts its parts into the line's storage:
+   serialised parts arrive one serial number per unit, everything else as quantity. */
+async function commitLineReceive(line,part){
+  const sns=splitSns(line.sn);
+  if(part&&part.type==='serialised'){
+    for(const sn of sns){
+      if(await getOne('serials',sn)) continue; /* already in the app — don’t add it twice */
+      await put('serials',{sn,pn:line.pn,storage:line.storage||'',status:'in_stock',machine:'',order:'',date:now(),note:''});
+    }
+    return;
+  }
+  const qty=parseInt(line.qty,10);
+  if(!qty||qty<1||!line.storage) return;
+  const s=await getOne('stock',[line.pn,line.storage]);
+  await put('stock',{pn:line.pn,storage:line.storage,qty:(s?s.qty:0)+qty});
+}
+/* A line waiting for its part has to show up in Incoming as part order entry.
+   Creating, changing or dropping that entry keeps it in step with the line. */
+async function syncWoLineIncoming(line){
+  const all=await getAll('incoming');
+  const entry=all.find(i=>i.line_id===line.id)||null;
+  if(line.status!=='Waiting part'){
+    if(entry&&entry.status==='Waiting'){
+      await del('incoming',entry.id);
+      await addHistory({action:'Part order entry removed',pn:line.pn,name:line.name||'',detail:'Line marked as '+line.status+' — dropped from Incoming',order:line.wo});
+    }
+    return;
+  }
+  if(entry&&entry.status!=='Waiting') return; /* it has already arrived — leave it alone */
+  const w=await getOne('workorders',line.wo);
+  if(!w) return;
+  const po=await ensurePartOrder(w);
+  const part=await getOne('parts',line.pn);
+  const sns=splitSns(line.sn);
+  const onTheirWay=[];
+  for(const sn of sns){ if(!(await getOne('serials',sn))) onTheirWay.push(sn); }
+  const qty=line.qty||sns.length||1;
+  const serialised=!!part&&part.type==='serialised';
+  const rec={
+    pn:line.pn,
+    storage:line.storage||'',
+    order:po,
+    status:'Waiting',
+    qty:serialised?(onTheirWay.length||qty):qty,
+    sn:onTheirWay.length?onTheirWay.join(', '):null,
+    wo:line.wo,
+    line_id:line.id,
+    note:'Part order line for work order '+line.wo
+  };
+  if(entry){
+    await put('incoming',Object.assign({},entry,{pn:rec.pn,storage:rec.storage,order:rec.order,qty:rec.qty,sn:rec.sn,note:rec.note}));
+    return;
+  }
+  rec.date=now();
+  await addRec('incoming',rec);
+  await addHistory({action:'Part order created',pn:line.pn,name:line.name||'',detail:'Logged in Incoming automatically · '+qty+' × '+line.pn+' · part order '+po,storage:rec.storage,order:po});
 }
 async function deleteWo(wo){
-  const [w,lines]=await Promise.all([getOne('workorders',wo),getAll('woLines')]);
+  const [w,lines,inc]=await Promise.all([getOne('workorders',wo),getAll('woLines'),getAll('incoming')]);
   if(!w) return;
   const mine=lines.filter(l=>l.wo===wo);
-  if(!await confirmDialog({title:'Delete work order '+wo+'?',message:(mine.length?plural(mine.length,'line')+' on it will also be deleted.\n':'')+'Stock, serials and history are not changed.',confirmLabel:'Delete work order',danger:true})) return;
-  await batch(['workorders','woLines'],s=>{ s.workorders.delete(wo); mine.forEach(l=>s.woLines.delete(l.id)); });
+  const lineIds=new Set(mine.map(l=>l.id));
+  const mineInc=inc.filter(i=>i.status==='Waiting'&&(i.wo===wo||(i.line_id!=null&&lineIds.has(i.line_id))));
+  const bits=[];
+  if(mine.length) bits.push(plural(mine.length,'line')+' on it will also be deleted.');
+  if(mineInc.length) bits.push(plural(mineInc.length,'part order entry')+' in Incoming will also be removed.');
+  if(!await confirmDialog({title:'Delete work order '+wo+'?',message:(bits.length?bits.join(' ')+'\n':'')+'Stock, serials and history are not changed.',confirmLabel:'Delete work order',danger:true})) return;
+  await batch(['workorders','woLines','incoming'],s=>{
+    s.workorders.delete(wo);
+    mine.forEach(l=>s.woLines.delete(l.id));
+    mineInc.forEach(i=>s.incoming.delete(i.id));
+  });
   await addHistory({action:'Work order deleted',pn:'—',detail:wo+' removed',machine:w.machine||'',order:wo});
   if(woExpandedWO===wo) woExpandedWO=null;
   await renderAll(); toast('Deleted work order '+wo);
 }
 async function deleteWoLine(id){
   const l=await getOne('woLines',id); if(!l) return;
-  if(!await confirmDialog({title:'Delete this line?',message:l.pn+' will be removed from '+l.wo+'.',confirmLabel:'Delete line',danger:true})) return;
-  await del('woLines',id);
+  const inc=(await getAll('incoming')).filter(i=>i.status==='Waiting'&&i.line_id===id);
+  const extra=inc.length?'\nThe part order entry it created in Incoming will be removed too.':'';
+  if(!await confirmDialog({title:'Delete this line?',message:l.pn+' will be removed from '+l.wo+'.'+extra,confirmLabel:'Delete line',danger:true})) return;
+  await batch(['woLines','incoming'],s=>{ s.woLines.delete(id); inc.forEach(i=>s.incoming.delete(i.id)); });
   await addHistory({action:'Work order line deleted',pn:l.pn,name:l.name||'',detail:'Removed from '+l.wo,order:l.wo});
   await renderAll(); toast('Deleted line'); await refreshWoDetail(l.wo);
 }
@@ -2727,10 +3274,10 @@ function validateData(d){
     const p=parts.get(i.pn);
     if(!p){ E.push('Incoming entry for unknown part '+i.pn); return; }
     if(!stor.has(i.storage)) E.push('Incoming entry for '+i.pn+' uses unknown storage “'+i.storage+'”');
-    if(p.type==='serialised'&&!i.sn) E.push('Incoming entry for serialised part '+i.pn+' has no serial number');
+    if(p.type==='serialised'&&!i.sn&&!(i.qty>0)) E.push('Incoming entry for serialised part '+i.pn+' has no serial number and no quantity');
     if(p.type!=='serialised'&&!(i.qty>0)) E.push('Incoming entry for '+i.pn+' has no valid quantity');
     if(['Waiting','Arrived'].indexOf(i.status)<0) E.push('Incoming entry for '+i.pn+' has invalid status “'+i.status+'”');
-    if(i.status==='Waiting'&&i.sn&&sers.has(i.sn)) E.push('Waiting serial '+i.sn+' already exists as a unit');
+    if(i.status==='Waiting'&&i.sn) splitSns(i.sn).forEach(sn=>{ if(sers.has(sn)) E.push('Waiting serial '+sn+' already exists as a unit'); });
   });
   d.rma.forEach(r=>{
     const lab='RMA '+(r.order||'')+' '+(r.old||'')+' → '+(r.new||'');
@@ -2748,6 +3295,7 @@ function validateData(d){
   d.woLines.forEach(l=>{
     if(!wos.has(l.wo)) E.push('Line for '+l.pn+' belongs to unknown work order '+l.wo);
     if(l.pn&&!parts.has(l.pn)) W.push('Work order line uses part '+l.pn+' that is not in the parts list');
+    if(l.storage&&!stor.has(l.storage)) W.push('Work order line for '+l.pn+' uses unknown storage “'+l.storage+'”');
   });
   d.machines.forEach(m=>{ if(m.group&&!d.machineGroups.some(g=>g.name===m.group)) W.push('Machine '+m.name+' is in an undefined group “'+m.group+'”'); });
   return {errors:E,warnings:W};

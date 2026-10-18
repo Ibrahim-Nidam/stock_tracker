@@ -1,4 +1,6 @@
 -- Run this once in the Supabase SQL editor for the Stocktrack project.
+-- Re-running it on an existing project is safe: the only changes are the
+-- "add column if not exists" statements at the bottom of the file.
 -- This schema keeps each Stocktrack data set in its own editable table.
 -- The browser app uses the publishable key, so these policies intentionally
 -- allow the app to read and write its own records without a login.
@@ -9,7 +11,8 @@ create table if not exists public.parts (
   pn text primary key,
   name text not null,
   type text not null,
-  min integer
+  min integer,
+  price numeric
 );
 
 create table if not exists public.storages (
@@ -46,7 +49,9 @@ create table if not exists public.incoming (
   sn text,
   status text,
   date text,
-  note text
+  note text,
+  wo text,
+  line_id bigint
 );
 
 create table if not exists public.rma (
@@ -108,8 +113,18 @@ create table if not exists public.wo_lines (
   status text,
   sn text,
   note text,
-  src text
+  src text,
+  storage text
 );
+
+-- ---------------------------------------------------------------------
+-- Upgrade for a database created before these columns existed.
+-- Safe to re-run: each column is only added when it is missing.
+-- ---------------------------------------------------------------------
+alter table public.parts    add column if not exists price numeric;
+alter table public.incoming add column if not exists wo text;
+alter table public.incoming add column if not exists line_id bigint;
+alter table public.wo_lines add column if not exists storage text;
 
 alter table public.parts enable row level security;
 alter table public.storages enable row level security;
