@@ -2976,9 +2976,12 @@ async function refreshWoDetail(wo){
 }
 
 /* ---------- xlsx export of the selected work orders ------------------------
-   One row per part line. The work order details (date & time, number, machine,
-   status, part order) are written on the first line row of each work order and
-   left blank on its following rows. */
+   Written straight into the xlsx format (a zip of small XML parts) rather than
+   with a library: the free spreadsheet build silently throws away cell colours
+   and borders, and this sheet needs both. One coloured header row for the
+   whole sheet, then every work order outlined as its own little table with two
+   blank rows in between. One row per part line; the work order details (date &
+   time, number, machine, status, part order) sit on the first row of a block. */
 /* a Date as an Excel serial number, so Excel shows and sorts it as a real date */
 function excelDate(d){
   if(!d||isNaN(d.getTime())) return null;
@@ -2996,9 +2999,83 @@ function excelDT(v){
   const ts=parseHistDate(s);
   return ts?excelDate(new Date(ts)):null;
 }
+/* the styles used by the sheet — the numbers are the cell style ids below */
+const XLS_HEAD=1, XLS_BOX=2, XLS_DATE=3, XLS_ID=4;
+/* the app's own colours: the header is painted in the action (accent) colour */
+const XLS_ACCENT='DC9D00', XLS_INK='15181B', XLS_RULE='15181B';
+function xlsxStyles(){
+  return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+  +'<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+  +'<numFmts count="1"><numFmt numFmtId="164" formatCode="dd/mm/yyyy\\ hh:mm"/></numFmts>'
+  +'<fonts count="2">'
+  +'<font><sz val="11"/><color rgb="FF'+XLS_INK+'"/><name val="Calibri"/><family val="2"/></font>'
+  +'<font><b/><sz val="11"/><color rgb="FF'+XLS_INK+'"/><name val="Calibri"/><family val="2"/></font>'
+  +'</fonts>'
+  +'<fills count="3">'
+  +'<fill><patternFill patternType="none"/></fill>'
+  +'<fill><patternFill patternType="gray125"/></fill>'
+  +'<fill><patternFill patternType="solid"><fgColor rgb="FF'+XLS_ACCENT+'"/><bgColor indexed="64"/></patternFill></fill>'
+  +'</fills>'
+  +'<borders count="2">'
+  +'<border><left/><right/><top/><bottom/><diagonal/></border>'
+  +'<border><left style="thin"><color rgb="FF'+XLS_RULE+'"/></left><right style="thin"><color rgb="FF'+XLS_RULE+'"/></right>'
+  +'<top style="thin"><color rgb="FF'+XLS_RULE+'"/></top><bottom style="thin"><color rgb="FF'+XLS_RULE+'"/></bottom><diagonal/></border>'
+  +'</borders>'
+  +'<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
+  /* 0 plain · 1 header (accent) · 2 boxed text · 3 boxed date · 4 boxed bold */
+  +'<cellXfs count="5">'
+  +'<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'
+  +'<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment vertical="center"/></xf>'
+  +'<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/>'
+  +'<xf numFmtId="164" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1"/>'
+  +'<xf numFmtId="0" fontId="1" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1"/>'
+  +'</cellXfs>'
+  +'<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>'
+  +'</styleSheet>';
+}
+/* ---- minimal zip writer (stored entries — no compression needed) ---- */
+let XLS_CRC=null;
+function xlsCrc32(buf){
+  if(!XLS_CRC){ XLS_CRC=[]; for(let n=0;n<256;n++){ let c=n; for(let k=0;k<8;k++) c=(c&1)?(0xEDB88320^(c>>>1)):(c>>>1); XLS_CRC[n]=c>>>0; } }
+  let crc=0^(-1);
+  for(let i=0;i<buf.length;i++) crc=(crc>>>8)^XLS_CRC[(crc^buf[i])&0xFF];
+  return (crc^(-1))>>>0;
+}
+function xlsZip(parts){
+  const enc=new TextEncoder(), locals=[], central=[];
+  let offset=0;
+  parts.forEach(p=>{
+    const nm=enc.encode(p.name), data=p.data, crc=xlsCrc32(data);
+    const lh=new Uint8Array(30+nm.length), lv=new DataView(lh.buffer);
+    lv.setUint32(0,0x04034b50,true); lv.setUint16(4,20,true); lv.setUint16(6,0,true);
+    lv.setUint16(8,0,true); lv.setUint16(10,0,true); lv.setUint16(12,0x21,true);
+    lv.setUint32(14,crc,true); lv.setUint32(18,data.length,true); lv.setUint32(22,data.length,true);
+    lv.setUint16(26,nm.length,true); lv.setUint16(28,0,true);
+    lh.set(nm,30);
+    locals.push(lh,data);
+    const cd=new Uint8Array(46+nm.length), cv=new DataView(cd.buffer);
+    cv.setUint32(0,0x02014b50,true); cv.setUint16(4,20,true); cv.setUint16(6,20,true);
+    cv.setUint16(8,0,true); cv.setUint16(10,0,true); cv.setUint16(12,0,true); cv.setUint16(14,0x21,true);
+    cv.setUint32(16,crc,true); cv.setUint32(20,data.length,true); cv.setUint32(24,data.length,true);
+    cv.setUint16(28,nm.length,true); cv.setUint32(42,offset,true);
+    cd.set(nm,46);
+    central.push(cd);
+    offset+=lh.length+data.length;
+  });
+  let cdSize=0; central.forEach(c=>{ cdSize+=c.length; });
+  const end=new Uint8Array(22), ev=new DataView(end.buffer);
+  ev.setUint32(0,0x06054b50,true); ev.setUint16(8,central.length,true); ev.setUint16(10,central.length,true);
+  ev.setUint32(12,cdSize,true); ev.setUint32(16,offset,true);
+  const all=locals.concat(central,[end]);
+  let total=0; all.forEach(a=>{ total+=a.length; });
+  const out=new Uint8Array(total); let at=0;
+  all.forEach(a=>{ out.set(a,at); at+=a.length; });
+  return out;
+}
+function xlsEsc(v){ return String(v==null?'':v).replace(/[<>&"']/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&apos;'}[c])).replace(/[\u0000-\u001f]/g,''); }
+function xlsCol(n){ let s=''; n++; while(n>0){ const m=(n-1)%26; s=String.fromCharCode(65+m)+s; n=Math.floor((n-1)/26); } return s; }
 async function generateWoXlsx(){
   if(!woSelected.size){ toast('Select the work orders you want first.','info'); return; }
-  if(typeof XLSX==='undefined'){ toast('The spreadsheet library has not loaded — connect to the internet and try again.','error'); return; }
   const [wos,lines,hist]=await Promise.all([getAll('workorders'),getAll('woLines'),getAll('history')]);
   /* the chosen work orders, in the order they are shown in the list */
   const sel=wos.filter(w=>woSelected.has(w.wo)).sort((a,b)=>(b.opened||'').localeCompare(a.opened||'')||b.wo.localeCompare(a.wo));
@@ -3007,37 +3084,96 @@ async function generateWoXlsx(){
   hist.filter(h=>h.pn&&h.order&&histTs(h)&&((h.action==='Received')||(h.action==='Work order line updated'&&/marked as Received/i.test(h.detail||''))))
     .sort((a,b)=>histTs(a)-histTs(b))
     .forEach(h=>{ const k=h.order+'|'+h.pn; (recv[k]=recv[k]||[]).push(histTs(h)); });
-  const aoa=[['Date & time','Work order','Machine','WO status','Part order','Part number','Designation','Qty','Line status','Received (date & time)']];
-  const dateCells=[];
-  sel.forEach(w=>{
+  /* one entry per sheet row: either a list of cells, or null for a blank row.
+     A cell is a value plus a style id — empty cells keep their style so the
+     outline around a work order stays unbroken. */
+  const rows=[['Date & time','Work order','Machine','WO status','Part order','Part number','Designation','Qty','Line status','Received (date & time)'].map(v=>({v,s:XLS_HEAD}))];
+  sel.forEach((w,wi)=>{
     const ls=lines.filter(l=>l.wo===w.wo).sort((a,b)=>lineSortKey(a)-lineSortKey(b)||a.id-b.id);
     (ls.length?ls:[null]).forEach((l,i)=>{
-      const r=aoa.length, first=i===0;
-      let opened='';
-      if(first){
-        const n=excelDT(w.opened);
-        if(n==null) opened=fmtDT(w.opened)||'';
-        else { opened=n; dateCells.push([r,0]); }
-      }
-      let received='';
+      const first=i===0;
+      const opened=first?excelDT(w.opened):null;
+      const cells=[
+        {v:first?(opened==null?(fmtDT(w.opened)||''):opened):'',s:first&&opened!=null?XLS_DATE:XLS_BOX},
+        {v:first?w.wo:'',s:first?XLS_ID:XLS_BOX},
+        {v:first?(w.machine||''):'',s:XLS_BOX},
+        {v:first?(w.status||''):'',s:XLS_BOX},
+        {v:first?(w.po||''):'',s:XLS_BOX},
+        {v:l?l.pn:'',s:XLS_BOX},
+        {v:l?(l.name||''):'',s:XLS_BOX},
+        {v:l&&l.qty!=null?l.qty:'',s:XLS_BOX},
+        {v:l?(l.status||''):'',s:XLS_BOX}
+      ];
+      let received={v:'',s:XLS_BOX};
       if(l&&l.status==='Received'){
         const q=recv[w.wo+'|'+l.pn], ts=q&&q.length?q.shift():0;
         const n=ts?excelDate(new Date(ts)):null;
-        if(n!=null){ received=n; dateCells.push([r,9]); }
+        if(n!=null) received={v:n,s:XLS_DATE};
       }
-      aoa.push([opened,first?w.wo:'',first?(w.machine||''):'',first?(w.status||''):'',first?(w.po||''):'',
-        l?l.pn:'',l?(l.name||''):'',l&&l.qty!=null?l.qty:'',l?(l.status||''):'',received]);
+      cells.push(received);
+      rows.push(cells);
     });
+    /* two blank rows keep each work order visually on its own */
+    if(wi<sel.length-1) rows.push(null,null);
   });
-  const ws=XLSX.utils.aoa_to_sheet(aoa);
-  dateCells.forEach(c=>{ const cell=ws[XLSX.utils.encode_cell({r:c[0],c:c[1]})]; if(cell&&cell.t==='n') cell.z='dd/mm/yyyy hh:mm'; });
-  ws['!cols']=[{wch:17},{wch:15},{wch:20},{wch:15},{wch:14},{wch:16},{wch:32},{wch:6},{wch:14},{wch:19}];
-  const wb=XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb,ws,'Work orders');
-  /* yyyy-mm-dd from the same helper block as the rest of the export's dates */
+  /* ---- turn the rows into the sheet's XML ---- */
+  let sheetData='';
+  rows.forEach((cells,i)=>{
+    const r=i+1;
+    if(!cells){ sheetData+='<row r="'+r+'"/>'; return; }
+    sheetData+='<row r="'+r+'"'+(i===0?' ht="20" customHeight="1"':'')+'>';
+    cells.forEach((c,ci)=>{
+      const ref=xlsCol(ci)+r;
+      if(c.v===''||c.v==null) sheetData+='<c r="'+ref+'" s="'+c.s+'"/>';
+      else if(typeof c.v==='number') sheetData+='<c r="'+ref+'" s="'+c.s+'"><v>'+c.v+'</v></c>';
+      else sheetData+='<c r="'+ref+'" s="'+c.s+'" t="inlineStr"><is><t xml:space="preserve">'+xlsEsc(c.v)+'</t></is></c>';
+    });
+    sheetData+='</row>';
+  });
+  const widths=[17,15,20,15,14,16,32,6,14,19];
+  const cols=widths.map((w,i)=>'<col min="'+(i+1)+'" max="'+(i+1)+'" width="'+w+'" customWidth="1"/>').join('');
+  const sheet='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    +'<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+    +'<dimension ref="A1:J'+rows.length+'"/>'
+    /* the header row stays put while scrolling through the work orders */
+    +'<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A2" sqref="A2"/></sheetView></sheetViews>'
+    +'<cols>'+cols+'</cols><sheetData>'+sheetData+'</sheetData></worksheet>';
+  const ct='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    +'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+    +'<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+    +'<Default Extension="xml" ContentType="application/xml"/>'
+    +'<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+    +'<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+    +'<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'
+    +'</Types>';
+  const rels='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    +'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+    +'<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>'
+    +'</Relationships>';
+  const workbook='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    +'<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+    +'<sheets><sheet name="Work orders" sheetId="1" r:id="rId1"/></sheets></workbook>';
+  const wbRels='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    +'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+    +'<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
+    +'<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
+    +'</Relationships>';
+  const enc=new TextEncoder();
+  const zip=xlsZip([
+    {name:'[Content_Types].xml',data:enc.encode(ct)},
+    {name:'_rels/.rels',data:enc.encode(rels)},
+    {name:'xl/workbook.xml',data:enc.encode(workbook)},
+    {name:'xl/_rels/workbook.xml.rels',data:enc.encode(wbRels)},
+    {name:'xl/styles.xml',data:enc.encode(xlsxStyles())},
+    {name:'xl/worksheets/sheet1.xml',data:enc.encode(sheet)}
+  ]);
   const name='work-orders-'+nowISO().slice(0,10)+'.xlsx';
-  XLSX.writeFile(wb,name);
-  toast('Generated '+name+' · '+plural(sel.length,'work order')+' · '+plural(aoa.length-1,'row'));
+  const url=URL.createObjectURL(new Blob([zip],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+  const a=document.createElement('a');
+  a.href=url; a.download=name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),2000);
+  toast('Generated '+name+' · '+plural(sel.length,'work order')+' · '+plural(rows.length-1,'row'));
 }
 
 /* ---------- work order modals (wrapped around the existing openModal) ---------- */
@@ -3519,6 +3655,5 @@ function chooseImportMode(fileName,lines,warnings){
 })();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
-<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 </body>
 </html>
