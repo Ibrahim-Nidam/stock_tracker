@@ -220,6 +220,10 @@
   .readout-num.doa{color:var(--doa)}
   .act-doa::before{background:var(--doa)}
   .clickrow{cursor:pointer}
+  /* multi select on the work orders page (xlsx export) */
+  .wo-sel-head{width:34px; text-align:center}
+  .wo-check-cell{width:34px; text-align:center}
+  .wo-check-cell input{width:15px; height:15px; cursor:pointer; accent-color:var(--accent)}
   /* work order row expands inline on desktop */
   .wo-expand-row td{padding:0; background:var(--surface); border-bottom:1px solid var(--line)}
   tr.wo-expand-row:hover td{background:var(--surface)}
@@ -409,10 +413,10 @@
         </section>
 
         <section class="view active" id="view-workorders">
-          <div class="toolbar"><input class="search-input" id="woSearch" placeholder="Search work order, machine, part number, serial, order…" oninput="renderWorkOrders()"><select class="select-control" id="woMachine" onchange="woMachineFilter=this.value;renderWorkOrders()" style="max-width:190px"></select><button class="btn btn-primary" type="button" data-act="addWo">+ New work order</button></div>
+          <div class="toolbar"><input class="search-input" id="woSearch" placeholder="Search work order, machine, part number, serial, order…" oninput="renderWorkOrders()"><select class="select-control" id="woMachine" onchange="woMachineFilter=this.value;renderWorkOrders()" style="max-width:190px"></select><button class="btn btn-ghost" type="button" id="woSelectBtn" data-act="woSelect">Select</button><button class="btn btn-primary" type="button" id="woGenerateBtn" data-act="woGenerate" style="display:none">Generate XLSX</button><button class="btn btn-primary" type="button" data-act="addWo">+ New work order</button></div>
           <div class="filter-row" id="woChips"></div>
           <div class="filter-row" id="woRangeChips" style="margin-bottom:16px"></div>
-          <div class="table-scroll"><table><thead><tr><th>Work order</th><th>Machine</th><th>Type</th><th>Status</th><th>Opened</th><th>Closed</th><th>Order / PO</th><th>Lines</th><th>Days open</th><th></th></tr></thead><tbody id="woBody"></tbody></table></div>
+          <div class="table-scroll"><table><thead><tr><th class="wo-sel-head" id="woSelHead" style="display:none"><input type="checkbox" data-act="woSelAll" aria-label="Select every work order shown"></th><th>Work order</th><th>Machine</th><th>Type</th><th>Status</th><th>Opened</th><th>Closed</th><th>Order / PO</th><th>Lines</th><th>Days open</th><th></th></tr></thead><tbody id="woBody"></tbody></table></div>
         </section>
 
         <section class="view" id="view-rma">
@@ -2848,6 +2852,8 @@ const WO_STATUSES=['In progress','Work complete','Work stopped'];
 const WO_TYPES=['Corrective','Preventive','Other'];
 const LINE_STATUSES=['Waiting part','Received'];
 let woFilter='active', woMachineFilter='', woRangeKey='all', woExpandedWO=null;
+/* multi select for the xlsx export: the mode, the chosen work orders and the list as it is shown */
+let woSelectMode=false, woSelected=new Set(), woVisibleWOs=[];
 /* the part and serial lists loaded into the part order (work order line) form */
 let woLineParts=[], woLineSerials=[];
 const WO_RANGES=[['all','Any time'],['today','Today'],['7d','Last 7 days'],['30d','Last 30 days'],['90d','Last 90 days'],['year','This year']];
@@ -2930,22 +2936,106 @@ async function renderWorkOrders(){
   $('woChips').innerHTML=chips.map(c=>'<button type="button" class="fchip'+(woFilter===c[0]?' active':'')+'" data-act="woFilter" data-key="'+esc(c[0])+'">'+esc(c[1])+'<span class="n">'+base.filter(w=>ok(w,c[0])).length+'</span></button>').join('');
   $('woRangeChips').innerHTML='<span class="filter-label">When</span>'+WO_RANGES.map(c=>'<button type="button" class="fchip'+(woRangeKey===c[0]?' active':'')+'" data-act="woRange" data-key="'+esc(c[0])+'">'+esc(c[1])+'<span class="n">'+base.filter(w=>ok(w,woFilter)&&woRangeMatch(w,c[0])).length+'</span></button>').join('');
   const rows=base.filter(w=>ok(w,woFilter)&&woRangeMatch(w,woRangeKey)).sort((a,b)=>(b.opened||'').localeCompare(a.opened||'')||b.wo.localeCompare(a.wo));
+  /* work orders that no longer exist drop out of the selection */
+  if(woSelected.size){ const have=new Set(wos.map(w=>w.wo)); woSelected.forEach(wo=>{ if(!have.has(wo)) woSelected.delete(wo); }); }
+  woVisibleWOs=rows;
   if(woExpandedWO&&!rows.some(w=>w.wo===woExpandedWO)) woExpandedWO=null;
+  const cols=woSelectMode?11:10;
   const html=await Promise.all(rows.map(async w=>{
     const open=woExpandedWO===w.wo;
-    let out='<tr class="clickrow'+(open?' open':'')+'" data-act="woOpen" data-wo="'+esc(w.wo)+'" aria-expanded="'+open+'"><td><span class="id-cell mono"><span class="chev">'+ICON_CHEV+'</span>'+esc(w.wo)+copyBtn(w.wo)+'</span></td><td>'+esc(w.machine||'—')+'</td><td>'+esc(w.type||'—')+'</td><td>'+woTag(w.status)+'</td><td class="nowrap">'+esc(fmtDT(w.opened)||'—')+'</td><td class="nowrap">'+esc(fmtDT(w.closed)||'—')+'</td><td class="mono">'+esc(w.po||'—')+'</td><td class="mono">'+(cnt[w.wo]||0)+'</td>'
+    let out='<tr class="clickrow'+(open?' open':'')+'" data-act="woOpen" data-wo="'+esc(w.wo)+'" aria-expanded="'+open+'">'
+      +(woSelectMode?'<td class="wo-check-cell"><input type="checkbox" data-act="woCheck" data-wo="'+esc(w.wo)+'" aria-label="Select '+esc(w.wo)+'"'+(woSelected.has(w.wo)?' checked':'')+'></td>':'')
+      +'<td><span class="id-cell mono"><span class="chev">'+ICON_CHEV+'</span>'+esc(w.wo)+copyBtn(w.wo)+'</span></td><td>'+esc(w.machine||'—')+'</td><td>'+esc(w.type||'—')+'</td><td>'+woTag(w.status)+'</td><td class="nowrap">'+esc(fmtDT(w.opened)||'—')+'</td><td class="nowrap">'+esc(fmtDT(w.closed)||'—')+'</td><td class="mono">'+esc(w.po||'—')+'</td><td class="mono">'+(cnt[w.wo]||0)+'</td>'
       +'<td class="mono nowrap" title="Days this work order has been open">'+woDaysOpen(w)+'</td>'
       +'<td class="actions-cell"><div class="row-actions">'+iconBtn('woEdit',{wo:w.wo},ICON_EDIT,'Edit work order')+iconBtn('woDel',{wo:w.wo},ICON_TRASH,'Delete work order',true)+'</div></td></tr>';
-    if(open) out+='<tr class="wo-expand-row"><td colspan="10"><div class="wo-expand-inner">'+await woDetailHTML(w.wo,true)+'</div></td></tr>';
+    if(open) out+='<tr class="wo-expand-row"><td colspan="'+cols+'"><div class="wo-expand-inner">'+await woDetailHTML(w.wo,true)+'</div></td></tr>';
     return out;
   }));
   $('woBody').innerHTML=html.join('')
-    ||emptyRow(10,wos.length?'No work orders match your search or filter.':'No work orders yet. Add one to start tracking repairs and maintenance.');
+    ||emptyRow(cols,wos.length?'No work orders match your search or filter.':'No work orders yet. Add one to start tracking repairs and maintenance.');
+  updateWoSelectBar();
+}
+/* the Select / Generate buttons in the toolbar follow the selection */
+function updateWoSelectBar(){
+  const head=$('woSelHead');
+  if(head){
+    head.style.display=woSelectMode?'':'none';
+    const all=head.querySelector('input');
+    if(all) all.checked=!!woVisibleWOs.length&&woVisibleWOs.every(w=>woSelected.has(w.wo));
+  }
+  const gen=$('woGenerateBtn');
+  if(gen){ gen.style.display=woSelected.size?'':'none'; gen.textContent='Generate XLSX ('+woSelected.size+')'; }
+  const sel=$('woSelectBtn');
+  if(sel) sel.textContent=woSelectMode?'Done selecting':'Select';
 }
 /* refresh the open inline details after a change (falls back to the modal on small screens) */
 async function refreshWoDetail(wo){
   if(wo&&woExpandedWO===wo&&woDetailIsInline()) await renderWorkOrders();
   else if(wo) await openModal('wodetail',{wo});
+}
+
+/* ---------- xlsx export of the selected work orders ------------------------
+   One row per part line. The work order details (date & time, number, machine,
+   status, part order) are written on the first line row of each work order and
+   left blank on its following rows. */
+/* a Date as an Excel serial number, so Excel shows and sorts it as a real date */
+function excelDate(d){
+  if(!d||isNaN(d.getTime())) return null;
+  return Date.UTC(d.getFullYear(),d.getMonth(),d.getDate(),d.getHours(),d.getMinutes())/86400000+25569;
+}
+/* the same for anything the app stores: yyyy-mm-ddThh:mm or dd/mm/yyyy hh:mm */
+function excelDT(v){
+  const s=String(v==null?'':v).trim();
+  if(!s) return null;
+  const iso=/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{1,2}):(\d{2}))?/.exec(s);
+  if(iso){
+    const d=iso[4]==null?new Date(+iso[1],+iso[2]-1,+iso[3]):new Date(+iso[1],+iso[2]-1,+iso[3],+iso[4],+iso[5]);
+    return excelDate(d);
+  }
+  const ts=parseHistDate(s);
+  return ts?excelDate(new Date(ts)):null;
+}
+async function generateWoXlsx(){
+  if(!woSelected.size){ toast('Select the work orders you want first.','info'); return; }
+  if(typeof XLSX==='undefined'){ toast('The spreadsheet library has not loaded — connect to the internet and try again.','error'); return; }
+  const [wos,lines,hist]=await Promise.all([getAll('workorders'),getAll('woLines'),getAll('history')]);
+  /* the chosen work orders, in the order they are shown in the list */
+  const sel=wos.filter(w=>woSelected.has(w.wo)).sort((a,b)=>(b.opened||'').localeCompare(a.opened||'')||b.wo.localeCompare(a.wo));
+  /* every moment a line was received, keyed by work order + part number, oldest first */
+  const recv={};
+  hist.filter(h=>h.pn&&h.order&&histTs(h)&&((h.action==='Received')||(h.action==='Work order line updated'&&/marked as Received/i.test(h.detail||''))))
+    .sort((a,b)=>histTs(a)-histTs(b))
+    .forEach(h=>{ const k=h.order+'|'+h.pn; (recv[k]=recv[k]||[]).push(histTs(h)); });
+  const aoa=[['Date & time','Work order','Machine','WO status','Part order','Part number','Designation','Qty','Line status','Received (date & time)']];
+  const dateCells=[];
+  sel.forEach(w=>{
+    const ls=lines.filter(l=>l.wo===w.wo).sort((a,b)=>lineSortKey(a)-lineSortKey(b)||a.id-b.id);
+    (ls.length?ls:[null]).forEach((l,i)=>{
+      const r=aoa.length, first=i===0;
+      let opened='';
+      if(first){
+        const n=excelDT(w.opened);
+        if(n==null) opened=fmtDT(w.opened)||'';
+        else { opened=n; dateCells.push([r,0]); }
+      }
+      let received='';
+      if(l&&l.status==='Received'){
+        const q=recv[w.wo+'|'+l.pn], ts=q&&q.length?q.shift():0;
+        const n=ts?excelDate(new Date(ts)):null;
+        if(n!=null){ received=n; dateCells.push([r,9]); }
+      }
+      aoa.push([opened,first?w.wo:'',first?(w.machine||''):'',first?(w.status||''):'',first?(w.po||''):'',
+        l?l.pn:'',l?(l.name||''):'',l&&l.qty!=null?l.qty:'',l?(l.status||''):'',received]);
+    });
+  });
+  const ws=XLSX.utils.aoa_to_sheet(aoa);
+  dateCells.forEach(c=>{ const cell=ws[XLSX.utils.encode_cell({r:c[0],c:c[1]})]; if(cell&&cell.t==='n') cell.z='dd/mm/yyyy hh:mm'; });
+  ws['!cols']=[{wch:17},{wch:15},{wch:20},{wch:15},{wch:14},{wch:16},{wch:32},{wch:6},{wch:14},{wch:19}];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Work orders');
+  const name='work-orders-'+localDateKey()+'.xlsx';
+  XLSX.writeFile(wb,name);
+  toast('Generated '+name+' · '+plural(sel.length,'work order')+' · '+plural(aoa.length-1,'row'));
 }
 
 /* ---------- work order modals (wrapped around the existing openModal) ---------- */
@@ -3293,6 +3383,12 @@ Object.assign(ACTIONS,{
   woEdit:d=>openModal('wo',{wo:d.wo}),
   woDel:d=>deleteWo(d.wo),
   addWo:()=>openModal('wo',{machine:woMachineFilter}),
+  /* multi select → xlsx export */
+  woSelect:()=>{ woSelectMode=!woSelectMode; if(!woSelectMode) woSelected.clear(); return renderWorkOrders(); },
+  /* ticking a box only touches the selection — no need to reload the page data */
+  woCheck:(d,el)=>{ if(el&&el.checked) woSelected.add(d.wo); else woSelected.delete(d.wo); updateWoSelectBar(); },
+  woSelAll:(d,el)=>{ const on=!!(el&&el.checked); woVisibleWOs.forEach(w=>{ if(on) woSelected.add(w.wo); else woSelected.delete(w.wo); }); document.querySelectorAll('#woBody .wo-check-cell input').forEach(cb=>{ cb.checked=on; }); updateWoSelectBar(); },
+  woGenerate:()=>generateWoXlsx(),
   woAddLine:d=>openModal('woline',{wo:d.wo}),
   woEditLine:async d=>{ const l=await getOne('woLines',+d.id); if(l) return openModal('woline',{id:+d.id,wo:l.wo}); },
   woDelLine:d=>deleteWoLine(+d.id)
@@ -3421,5 +3517,6 @@ function chooseImportMode(fileName,lines,warnings){
 })();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 </body>
 </html>
