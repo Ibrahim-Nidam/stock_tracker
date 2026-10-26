@@ -264,6 +264,18 @@
   .sn-row input{flex:1 1 160px; min-width:0}
   .sn-row select{flex:1 1 100%}
   .sn-row .btn-scan{flex:0 0 auto; min-height:32px}
+  /* one row per unit ordered: the new serial and the faulty one it replaces */
+  .sn-head{display:grid; grid-template-columns:26px minmax(0,1fr) minmax(0,1fr); gap:8px; font-size:11.5px; font-weight:600; color:var(--muted); margin-bottom:6px}
+  .sn-pair{display:grid; grid-template-columns:26px minmax(0,1fr) minmax(0,1fr); gap:8px; align-items:start; margin-bottom:8px}
+  .sn-pair.no-aff{grid-template-columns:26px minmax(0,1fr)}
+  .sn-pair .sn-idx{text-align:right; font-size:11.5px; line-height:32px; color:var(--muted); font-family:'IBM Plex Mono',monospace}
+  .sn-unit{display:flex; flex-direction:column; gap:6px; min-width:0}
+  .sn-unit-in{display:flex; gap:6px; min-width:0}
+  .sn-unit-in input{flex:1 1 auto; min-width:0}
+  .sn-unit .btn-scan{flex:0 0 auto; min-height:32px}
+  .sn-pair select{width:100%}
+  /* the part order line has two serial columns, so it gets more room */
+  .modal-box.wide{max-width:660px}
   /* draft banner shown on top of the forms that keep drafts */
   .draft-bar{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 10px; border:1px dashed var(--line-soft); background:var(--hover); font-size:11.5px; color:var(--muted); margin-bottom:14px}
   .draft-bar .draft-text{line-height:1.45}
@@ -438,7 +450,7 @@
   </div>
 
   <div class="modal-overlay" id="modalOverlay">
-    <div class="modal-box">
+    <div class="modal-box" id="modalBox">
       <div class="modal-head"><span id="modalTitle"></span><button class="modal-close" type="button" onclick="closeModal(true)" aria-label="Close">&times;</button></div>
       <form id="modalForm" novalidate>
         <div id="modalBody"></div>
@@ -2176,7 +2188,8 @@ function snRowSet(setId,count,existing,prefill,withScan){
 }
 function snValues(setId){
   const set=$(setId);
-  return set?Array.from(set.querySelectorAll('input')).map(i=>i.value.trim()).filter(Boolean):[];
+  /* the affected (faulty) serials carry data-aff and are not new serial numbers */
+  return set?Array.from(set.querySelectorAll('input:not([data-aff])')).map(i=>i.value.trim()).filter(Boolean):[];
 }
 function snPickChange(sel){
   const input=$(sel.id.replace('pick_',''));
@@ -3000,7 +3013,7 @@ function excelDT(v){
   return ts?excelDate(new Date(ts)):null;
 }
 /* the styles used by the sheet — the numbers are the cell style ids below */
-const XLS_HEAD=1, XLS_BOX=2, XLS_DATE=3, XLS_ID=4;
+const XLS_HEAD=1, XLS_BOX=2, XLS_DATE=3, XLS_ID=4, XLS_WRAP=5;
 /* the app's own colours: the header is painted in the action (accent) colour */
 const XLS_ACCENT='DC9D00', XLS_INK='15181B', XLS_RULE='15181B';
 function xlsxStyles(){
@@ -3022,13 +3035,15 @@ function xlsxStyles(){
   +'<top style="thin"><color rgb="FF'+XLS_RULE+'"/></top><bottom style="thin"><color rgb="FF'+XLS_RULE+'"/></bottom><diagonal/></border>'
   +'</borders>'
   +'<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
-  /* 0 plain · 1 header (accent) · 2 boxed text · 3 boxed date · 4 boxed bold */
-  +'<cellXfs count="5">'
+  /* 0 plain · 1 header (accent) · 2 boxed text · 3 boxed date · 4 boxed bold
+     · 5 boxed, wrapped (the serial number columns carry one unit per line) */
+  +'<cellXfs count="6">'
   +'<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'
   +'<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment vertical="center"/></xf>'
   +'<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/>'
   +'<xf numFmtId="164" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1"/>'
   +'<xf numFmtId="0" fontId="1" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1"/>'
+  +'<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment wrapText="1"/></xf>'
   +'</cellXfs>'
   +'<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>'
   +'</styleSheet>';
@@ -3072,11 +3087,51 @@ function xlsZip(parts){
   all.forEach(a=>{ out.set(a,at); at+=a.length; });
   return out;
 }
-function xlsEsc(v){ return String(v==null?'':v).replace(/[<>&"']/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&apos;'}[c])).replace(/[\u0000-\u001f]/g,''); }
+/* newlines survive (the serial columns list one unit per line), nothing else
+   that XML can't carry does */
+function xlsEsc(v){ return String(v==null?'':v).replace(/[<>&"']/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&apos;'}[c])).replace(/[\u0000-\u0009\u000b-\u001f]/g,''); }
 function xlsCol(n){ let s=''; n++; while(n>0){ const m=(n-1)%26; s=String.fromCharCode(65+m)+s; n=Math.floor((n-1)/26); } return s; }
+/* The RMAs raised from the lines of one work order, grouped by the line they
+   belong to. A record names the line it was raised from in its note; older ones
+   are matched by the replacement serial they carry — that matters when the same
+   part is ordered on two lines of one work order. Anything still unaccounted
+   for (the replacement is not known yet) goes to the first line for that part. */
+function rmasByLine(wo,lines,rmas){
+  const out={};
+  lines.forEach(l=>{ out[l.id]=[]; });
+  const rest=[];
+  rmas.filter(r=>r.wo===wo).forEach(r=>{
+    const named=/From part order line #(\d+) on /.exec(String(r.note||''));
+    const byName=named&&lines.find(l=>String(l.id)===named[1]);
+    if(byName){ out[byName.id].push(r); return; }
+    const nw=String(r.new||'').trim().toLowerCase();
+    const bySn=nw?lines.find(l=>splitSns(l.sn).some(s=>s.toLowerCase()===nw)):null;
+    if(bySn){ out[bySn.id].push(r); return; }
+    rest.push(r);
+  });
+  rest.forEach(r=>{ const first=lines.find(x=>x.pn===r.pn); if(first) out[first.id].push(r); });
+  return out;
+}
+/* The serial numbers of a line: every RMA raised from it pairs a faulty serial
+   with the new one that replaced it, and any line serial no RMA covers follows
+   on its own line. Both cells are written one unit per line so the two columns
+   line up exactly, whatever is still missing. */
+function woSnCells(line,rmas){
+  const empty={v:'',s:XLS_WRAP};
+  if(!line) return {nw:empty,def:empty};
+  const units=(rmas||[])
+    .slice().sort((a,b)=>(a.ts||0)-(b.ts||0)||(a.id||0)-(b.id||0))
+    .map(r=>({nw:String(r.new||'').trim(),def:String(r.old||'').trim()}));
+  const used=new Set(units.map(u=>u.nw.toLowerCase()).filter(Boolean));
+  splitSns(line.sn).forEach(s=>{ if(!used.has(s.toLowerCase())) units.push({nw:s,def:''}); });
+  const us=units.filter(u=>u.nw||u.def);
+  if(!us.length) return {nw:empty,def:empty};
+  const join=k=>us.length===1?us[0][k]:us.map(u=>u[k]||'').join('\n');
+  return {nw:{v:join('nw'),s:XLS_WRAP},def:{v:join('def'),s:XLS_WRAP}};
+}
 async function generateWoXlsx(){
   if(!woSelected.size){ toast('Select the work orders you want first.','info'); return; }
-  const [wos,lines,hist]=await Promise.all([getAll('workorders'),getAll('woLines'),getAll('history')]);
+  const [wos,lines,hist,rmas]=await Promise.all([getAll('workorders'),getAll('woLines'),getAll('history'),getAll('rma')]);
   /* the chosen work orders, in the order they are shown in the list */
   const sel=wos.filter(w=>woSelected.has(w.wo)).sort((a,b)=>(b.opened||'').localeCompare(a.opened||'')||b.wo.localeCompare(a.wo));
   /* every moment a line was received, keyed by work order + part number, oldest first */
@@ -3087,12 +3142,16 @@ async function generateWoXlsx(){
   /* one entry per sheet row: either a list of cells, or null for a blank row.
      A cell is a value plus a style id — empty cells keep their style so the
      outline around a work order stays unbroken. */
-  const rows=[['Date & time','Work order','Machine','WO status','Part order','Part number','Designation','Qty','Line status','Received (date & time)'].map(v=>({v,s:XLS_HEAD}))];
+  const rows=[['Date & time','Work order','Machine','WO status','Part order','Part number','Designation','Qty','New S/N','Defect S/N','Line status','Received (date & time)'].map(v=>({v,s:XLS_HEAD}))];
   sel.forEach((w,wi)=>{
     const ls=lines.filter(l=>l.wo===w.wo).sort((a,b)=>lineSortKey(a)-lineSortKey(b)||a.id-b.id);
+    /* which RMAs belong to which line of this work order */
+    const byLine=rmasByLine(w.wo,ls,rmas);
     (ls.length?ls:[null]).forEach((l,i)=>{
       const first=i===0;
       const opened=first?excelDT(w.opened):null;
+      /* serialised lines show their new serials next to the faulty ones they replace */
+      const sn=woSnCells(l,l?byLine[l.id]:[]);
       const cells=[
         {v:first?(opened==null?(fmtDT(w.opened)||''):opened):'',s:first&&opened!=null?XLS_DATE:XLS_BOX},
         {v:first?w.wo:'',s:first?XLS_ID:XLS_BOX},
@@ -3102,6 +3161,8 @@ async function generateWoXlsx(){
         {v:l?l.pn:'',s:XLS_BOX},
         {v:l?(l.name||''):'',s:XLS_BOX},
         {v:l&&l.qty!=null?l.qty:'',s:XLS_BOX},
+        sn.nw,
+        sn.def,
         {v:l?(l.status||''):'',s:XLS_BOX}
       ];
       let received={v:'',s:XLS_BOX};
@@ -3130,11 +3191,11 @@ async function generateWoXlsx(){
     });
     sheetData+='</row>';
   });
-  const widths=[17,15,20,15,14,16,32,6,14,19];
+  const widths=[17,15,20,15,14,16,32,6,18,18,14,19];
   const cols=widths.map((w,i)=>'<col min="'+(i+1)+'" max="'+(i+1)+'" width="'+w+'" customWidth="1"/>').join('');
   const sheet='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
     +'<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
-    +'<dimension ref="A1:J'+rows.length+'"/>'
+    +'<dimension ref="A1:L'+rows.length+'"/>'
     /* the header row stays put while scrolling through the work orders */
     +'<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A2" sqref="A2"/></sheetView></sheetViews>'
     +'<cols>'+cols+'</cols><sheetData>'+sheetData+'</sheetData></worksheet>';
@@ -3180,6 +3241,8 @@ async function generateWoXlsx(){
 const WO_MODALS={wo:['Add work order','Edit work order','Add work order','Save changes'],woline:['Add part order line','Edit line','Add line','Save changes'],wodetail:['Work order','','Close','']};
 const _openModalBase=openModal;
 openModal=async function(type,ctx){
+  /* the part order line has a serial column per unit, so it gets a wider box */
+  const mbox=$('modalBox'); if(mbox) mbox.classList.toggle('wide',type==='woline');
   if(!WO_MODALS[type]) return _openModalBase(type,ctx);
   ctx=ctx||{}; modalType=type; modalCtx=ctx; draftKey='';
   const body=$('modalBody');
@@ -3219,9 +3282,9 @@ openModal=async function(type,ctx){
       +'<div class="field" id="f_typeWrap" style="display:none"><label>Part type (this part number isn’t in the parts list yet)</label><select id="f_type" onchange="renderWoLineSnRows()"><option value="nonserialised">Non-serialised</option><option value="serialised">Serialised</option><option value="consumable">Consumable</option></select></div>'
       +'<div class="field"><label>Name</label><input id="f_name" value="'+esc(l?l.name||'':'')+'" placeholder="Filled from the part if left empty"></div>'
       +'<div class="field"><label>Quantity</label><input id="f_qty" type="number" min="1" value="'+esc(l&&l.qty!=null?l.qty:'1')+'" oninput="onWoLineQtyChange()"></div>'
-      +'<div class="field" id="f_snWrap" style="display:none"><label>Serial number of the new part</label><div id="f_snSet"></div></div>'
-      /* the affected serial is only asked for on a new line — that is what the automatic RMA is raised against */
-      +(ctx.id?'':'<div class="field" id="f_affectedWrap" style="display:none"><label>Serial number of the affected part</label><div class="input-row"><input id="f_affected" list="f_affectedList" placeholder="Serial number being replaced" autocomplete="off" oninput="clearAffectedErr()">'+scanBtn('f_affected')+'</div><datalist id="f_affectedList"></datalist><div class="field-error" id="f_affected_err"></div></div>')
+      +'<div class="field" id="f_snWrap" style="display:none"><label>Serial numbers — one row per unit ordered</label><div id="f_snSet"></div></div>'
+      /* the affected (faulty) serial is only asked for on a new line — that is what the automatic RMA is raised against */
+      +(ctx.id?'':'<datalist id="f_affectedList"></datalist>')
       +'<div class="field"><label>Storage</label><select id="f_storage">'+storages.map(s=>'<option value="'+esc(s.name)+'"'+(l&&l.storage===s.name?' selected':'')+'>'+esc(s.name)+'</option>').join('')+'</select></div>'
       +'<div class="field"><label>Line status</label><select id="f_status">'+optList(LINE_STATUSES,cur.status)+'</select></div>'
       +'<div class="field"><label>Note</label><input id="f_note" value="'+esc(l?l.note||'':'')+'"></div>';
@@ -3272,21 +3335,63 @@ function woLineExistingSns(){
   const pn=(($('f_pn')||{}).value||'').trim();
   return woLineSerials.filter(s=>s.pn===pn&&!s.rma).map(s=>String(s.sn)).sort((a,b)=>a.localeCompare(b));
 }
+/* Serial numbers for a part order line: one row per unit ordered, carrying the
+   new serial (the replacement) and, on a new line, the faulty serial it takes
+   out — the two are logged as a pair, one RMA for each row. */
 function renderWoLineSnRows(prefill){
   const wrap=$('f_snWrap'); if(!wrap) return;
   const serial=woLineIsSerial();
   wrap.style.display=serial?'block':'none';
-  /* the affected serial (the faulty unit coming out) is asked alongside the new ones */
-  const awrap=$('f_affectedWrap');
-  if(awrap){
-    awrap.style.display=serial?'block':'none';
-    const pn=(($('f_pn')||{}).value||'').trim();
-    const list=$('f_affectedList');
-    if(list) list.innerHTML=serial?woLineSerials.filter(s=>s.pn===pn&&s.status==='used').map(s=>'<option value="'+esc(s.sn)+'">').join(''):'';
-  }
   const set=$('f_snSet');
-  if(!serial){ if(set) set.innerHTML=''; return; }
-  snRowSet('f_snSet',($('f_qty')||{}).value,woLineExistingSns(),prefill&&prefill.length?prefill:null,true);
+  if(!set) return;
+  if(!serial){ set.innerHTML=''; return; }
+  /* the affected serial is only asked for on a new line — an existing line keeps
+     the pairs it was created with */
+  const showAff=!modalCtx.id&&!!$('f_affectedList');
+  const keepNw=(prefill&&prefill.length)?prefill:snValues('f_snSet');
+  const keepAff=affValues();
+  const qty=Math.max(0,parseInt(($('f_qty')||{}).value,10)||0);
+  const picks=woLineExistingSns();
+  const pn=(($('f_pn')||{}).value||'').trim();
+  if(showAff) $('f_affectedList').innerHTML=woLineSerials.filter(s=>s.pn===pn&&s.status==='used').map(s=>'<option value="'+esc(s.sn)+'">').join('');
+  let html='';
+  if(showAff) html+='<div class="sn-head"><span></span><span>New serial — the replacement</span><span>Affected serial — the faulty unit</span></div>';
+  for(let i=0;i<qty;i++){
+    html+='<div class="sn-pair'+(showAff?'':' no-aff')+'">'
+      +'<span class="sn-idx">'+(i+1)+'</span>'
+      +'<div class="sn-unit">'
+        +'<div class="sn-unit-in"><input id="f_snSet_'+i+'" placeholder="New serial '+(i+1)+'" autocomplete="off" oninput="refreshSnPicks(\'f_snSet\')">'+scanBtn('f_snSet_'+i)+'</div>'
+        +(picks.length?'<select class="sn-pick" id="pick_f_snSet_'+i+'" data-set="f_snSet" onchange="snPickChange(this)"><option value="">Existing serial…</option>'+picks.map(sn=>'<option value="'+esc(sn)+'">'+esc(sn)+'</option>').join('')+'</select>':'')
+      +'</div>'
+      +(showAff?'<div class="sn-unit"><div class="sn-unit-in"><input id="f_aff_'+i+'" data-aff="1" placeholder="Affected serial '+(i+1)+'" list="f_affectedList" autocomplete="off" oninput="clearAffectedErr()">'+scanBtn('f_aff_'+i)+'</div></div>':'')
+      +'</div>';
+  }
+  if(showAff){
+    html+='<div class="field-error" id="f_affected_err"></div>'
+      +'<p class="helper-note">One row per unit ordered: the faulty serial on the right comes out of the machine, the new serial on the left goes in as its replacement — one RMA is logged for each row.</p>';
+  }
+  set.innerHTML=html;
+  keepNw.forEach((v,i)=>{ const el=$('f_snSet_'+i); if(el&&v) el.value=v; });
+  keepAff.forEach((v,i)=>{ const el=$('f_aff_'+i); if(el&&v) el.value=v; });
+  refreshSnPicks('f_snSet');
+}
+/* every affected serial that has been typed in, in row order */
+function affValues(){
+  const set=$('f_snSet');
+  return set?Array.from(set.querySelectorAll('input[data-aff]')).map(i=>i.value.trim()).filter(Boolean):[];
+}
+/* the pairs the rows describe: only rows with an affected serial are a pair, and
+   each keeps the new serial from its own row so the two stay linked */
+function woLineSnPairs(){
+  const set=$('f_snSet'), out=[];
+  if(!set) return out;
+  Array.from(set.querySelectorAll('.sn-pair')).forEach((el,i)=>{
+    const nw=el.querySelector('input:not([data-aff])');
+    const aff=el.querySelector('input[data-aff]');
+    const old=aff?aff.value.trim():'';
+    if(old) out.push({nw:nw?nw.value.trim():'',old,row:i+1});
+  });
+  return out;
 }
 function clearAffectedErr(){ const err=$('f_affected_err'); if(err) err.textContent=''; }
 function onWoLineQtyChange(){
@@ -3358,7 +3463,7 @@ async function saveWoLine(){
   const storage=$('f_storage').value;
   const status=$('f_status').value;
   if(!storage) throw new Error('Choose a storage — the parts have to go somewhere.');
-  let sn='', affected='';
+  let sn='', affected=[];
   if(part.type==='serialised'){
     const vals=snValues('f_snSet');
     const seen=new Set();
@@ -3368,12 +3473,18 @@ async function saveWoLine(){
       seen.add(key);
     }
     sn=vals.join(', ');
-    /* the faulty unit coming out of the machine — an RMA is logged against it */
-    affected=(($('f_affected')||{}).value||'').trim();
-    if(affected){
-      if(seen.has(affected.toLowerCase())) throw new Error('The serial number of the affected part can’t also be one of the new serial numbers.');
-      const declared=await rmaDeclared(affected);
-      if(declared) throw new Error(rmaDeniedMsg(affected,declared));
+    /* every row with a faulty serial is its own pair — one RMA per row, linked
+       to the replacement serial typed on the same row */
+    affected=woLineSnPairs();
+    const affSeen=new Set();
+    const affFail=(msg)=>{ const el=$('f_affected_err'); if(el) el.textContent=msg; throw new Error(msg); };
+    for(const p of affected){
+      const key=p.old.toLowerCase();
+      if(affSeen.has(key)) affFail('Row '+p.row+': the affected serial number “'+p.old+'” is entered twice.');
+      affSeen.add(key);
+      if(seen.has(key)) affFail('Row '+p.row+': “'+p.old+'” can’t be an affected serial and a new serial on the same line.');
+      const declared=await rmaDeclared(p.old);
+      if(declared) affFail('Row '+p.row+': '+rmaDeniedMsg(p.old,declared));
     }
   }
   const rec={wo:modalCtx.wo,pn,name:typedName||part.name,qty,status,sn,storage,note:$('f_note').value.trim()};
@@ -3385,6 +3496,9 @@ async function saveWoLine(){
     const saved=Object.assign({},old,rec);
     await put('woLines',saved);
     await syncWoLineIncoming(saved);
+    /* the replacement serials are often only known later, so a pending RMA raised
+       from this line is linked up now that the line has its serial numbers */
+    if((rec.sn||'')!==(old.sn||'')) await linkLineRma(saved);
     /* a line that just came in as Received puts its parts into storage */
     if(old.status!=='Received'&&rec.status==='Received'){
       await commitLineReceive(saved,part);
@@ -3402,26 +3516,58 @@ async function saveWoLine(){
   }
   await addHistory({action:'Work order line added',pn,name:rec.name,detail:(qty==null?'':qty+' × ')+rec.status,order:rec.wo});
   let rmaMsg='';
-  if(affected){ await createWoLineRma(line,part,affected); rmaMsg=' · RMA logged for affected serial '+affected; }
+  /* one RMA per row: the faulty serial out of the machine linked to the new one */
+  for(const p of affected) await createWoLineRma(line,part,p.old,p.nw||'');
+  if(affected.length) rmaMsg=' · '+(affected.length===1?'RMA logged for affected serial '+affected[0].old:plural(affected.length,'RMA')+' logged for '+plural(affected.length,'affected serial'));
   return 'Added '+pn+' to '+rec.wo+(line.status==='Waiting part'?' · logged in Incoming':'')+rmaMsg;
 }
-/* A part order line for a serialised part swaps a faulty unit for a new one, so the
-   RMA is logged automatically: the affected serial is the RMA part, the new serial
-   (when it is already known) is its replacement. */
-async function createWoLineRma(line,part,affected){
+/* A part order line for a serialised part swaps faulty units for new ones, so the
+   RMA is logged automatically: one record per row of the form — the affected
+   serial is the RMA part, the new serial on the same row (when it is already
+   known) is its replacement. */
+async function createWoLineRma(line,part,affected,replacement){
   const w=await getOne('workorders',line.wo)||{};
-  const sns=splitSns(line.sn);
-  const nw=sns.length===1?sns[0]:'';
+  const nw=String(replacement||'').trim();
   const t=now();
-  const rec={pn:line.pn,order:w.po||'',old:affected,new:nw,status:(nw&&line.status==='Received')?'Replaced':'Pending',date:t,ts:Date.now(),machine:w.machine||'',newCreated:false,wo:line.wo,note:'From part order line on '+line.wo};
+  const rec={pn:line.pn,order:w.po||'',old:affected,new:nw,status:(nw&&line.status==='Received')?'Replaced':'Pending',date:t,ts:Date.now(),machine:w.machine||'',newCreated:false,wo:line.wo,note:'From part order line #'+line.id+' on '+line.wo};
   const oSer=await getOne('serials',affected);
   await batch(['serials','rma'],st=>{
     st.rma.add(rec);
     /* the faulty unit is declared RMA — it can never be installed or received again */
     st.serials.put(Object.assign({sn:affected,pn:line.pn,storage:'',machine:w.machine||'',order:w.po||'',date:'',note:''},oSer||{},{status:'rma',rma:true}));
   });
-  await addHistory({action:'RMA: part removed',pn:line.pn,name:(part&&part.name)||line.name||'',sn:affected,detail:'Serial '+affected+' declared RMA'+(nw?' — replaced by '+nw:'')+' · work order '+line.wo,machine:w.machine||'',order:w.po||''});
+  await addHistory({action:'RMA: part removed',pn:line.pn,name:(part&&part.name)||line.name||'',sn:affected,detail:'Serial '+affected+' declared RMA'+(nw?' — replaced by '+nw:' — replacement not decided yet')+' · work order '+line.wo,machine:w.machine||'',order:w.po||''});
   return rec;
+}
+/* The replacement serial is often unknown when the line is created (the parts
+   have not arrived yet), so the RMA raised from the line stays Pending until the
+   line knows its serial numbers. When that happens the two are linked up, in the
+   order both were entered — but only when the counts line up, so a serial never
+   gets attached to the wrong faulty unit. */
+async function linkLineRma(line){
+  const news=splitSns(line.sn);
+  if(!news.length) return 0;
+  const all=await getAll('rma');
+  const marker='From part order line #'+line.id+' on ';
+  const pending=all.filter(r=>{
+    if(r.wo!==line.wo||r.pn!==line.pn||(r.new||'')) return false;
+    const n=String(r.note||'');
+    /* records raised from another line of the same part are not this line's */
+    if(n.indexOf('From part order line #')===0) return n.indexOf(marker)===0;
+    return n.indexOf('From part order line on ')===0; /* raised before lines were named */
+  }).sort((a,b)=>(a.ts||0)-(b.ts||0)||(a.id||0)-(b.id||0));
+  if(!pending.length) return 0;
+  const taken=new Set(all.map(r=>String(r.new||'').toLowerCase()).filter(Boolean));
+  const free=news.filter(s=>!taken.has(s.toLowerCase()));
+  if(!free.length||free.length!==pending.length) return 0;
+  let n=0;
+  for(const r of pending){
+    const nw=free[n];
+    await put('rma',Object.assign({},r,{new:nw,status:line.status==='Received'?'Replaced':'Pending'}));
+    await addHistory({action:'RMA replaced',pn:r.pn,name:line.name||'',sn:nw,detail:'Serial '+nw+' linked as the replacement for '+r.old+' · work order '+line.wo,machine:r.machine||'',order:r.order||''});
+    n++;
+  }
+  return n;
 }
 /* A line that comes in as Received puts its parts into the line's storage:
    serialised parts arrive one serial number per unit, everything else as quantity. */
