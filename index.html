@@ -195,6 +195,8 @@
   .inc-grid dd{margin:0; font-size:13.5px; font-weight:600; display:flex; align-items:center; gap:5px; overflow-wrap:anywhere; min-width:0}
   .inc-actions{display:flex; gap:8px; flex-wrap:wrap}
   .inc-actions .btn-primary{flex:1 1 auto; justify-content:center}
+  .inc-qty-select{font-family:inherit; font-size:13px; font-weight:600; color:var(--ink); background:var(--surface); border:1px solid var(--line); padding:3px 7px; border-radius:0; cursor:pointer; max-width:100%}
+  .inc-qty-select:focus{outline:none; border-color:var(--accent)}
 
   /* history filters */
   .filter-row{display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:10px}
@@ -1701,6 +1703,14 @@ async function deleteSerial(sn){
 
 /* ---------- incoming ---------- */
 function incField(label,html){ return '<div><dt>'+label+'</dt><dd>'+html+'</dd></div>'; }
+function incQtySelectHTML(id, qty){
+  const max = Math.max(1, parseInt(qty, 10) || 1);
+  let opts = '';
+  for(let n = 1; n <= max; n++){
+    opts += '<option value="' + n + '"' + (n === max ? ' selected' : '') + '>' + plural(n, 'unit') + (n === max && max > 1 ? ' (all)' : '') + '</option>';
+  }
+  return '<select id="inc-qty-' + id + '" class="inc-qty-select" aria-label="Quantity arrived">' + opts + '</select>';
+}
 async function renderIncoming(){
   const [allIncoming,parts,lines]=await Promise.all([getAll('incoming'),getAll('parts'),getAll('woLines')]);
   const incoming=allIncoming.filter(i=>i.status==='Waiting');
@@ -1727,7 +1737,7 @@ async function renderIncoming(){
       +'<dl class="inc-grid">'
       +incField(i.wo?'Part order':'Order / ticket','<span class="mono">'+esc(i.order||'—')+'</span>'+(i.order?copyBtn(i.order):''))
       +(i.wo?incField('Work order','<span class="mono">'+esc(i.wo)+'</span>'+copyBtn(i.wo))+incField('Lines in this part order',esc(lineCount[i.wo]?plural(lineCount[i.wo],'line'):'—')):'')
-      +incField(isSerial?'Serial number(s)':'Quantity',isSerial?('<span class="mono">'+esc(sns.join(', '))+'</span>'+copyBtn(sns.join(', '))):esc(i.qty==null?'—':plural(i.qty,'unit')))
+      +incField(isSerial?'Serial number(s)':'Quantity',isSerial?('<span class="mono">'+esc(sns.join(', '))+'</span>'+copyBtn(sns.join(', '))):incQtySelectHTML(i.id,i.qty))
       +incField('Will be stored in',esc(i.storage))
       +incField('Logged on','<span title="The date and time this incoming order was recorded in Stocktrack">'+esc(fmtDT(i.date)||'—')+'</span>')
       +incField('Days waiting','<span title="Whole days since this entry was logged">'+esc(waiting==null?'—':plural(waiting,'day'))+'</span>')
@@ -1752,25 +1762,71 @@ async function markArrived(id){
     if(d){ toast(rmaDeniedMsg(sn,d),'error'); return; }
     if(await getOne('serials',sn)){ toast('Serial “'+sn+'” already exists in the system. Edit this incoming entry first.','error'); return; }
   }
-  rec.status='Arrived';
-  await put('incoming',rec);
-  await commitReceive(rec);
-  await addHistory({action:'Arrived',pn:rec.pn,name:part?part.name:'',sn:sns.join(', '),detail:(sns.length?('Serial '+sns.join(', ')):('Qty '+rec.qty))+' arrived at '+rec.storage,storage:rec.storage,order:rec.order});
-  /* the work order line behind this entry comes off "Waiting part" automatically */
-  if(rec.line_id!=null){
-    const line=await getOne('woLines',rec.line_id);
-    if(line&&line.status==='Waiting part'){
-      await put('woLines',Object.assign({},line,{status:'Received'}));
-      await addHistory({action:'Work order line updated',pn:rec.pn,name:line.name||'',detail:'Line on '+rec.wo+' marked as Received — the parts arrived at '+rec.storage,order:rec.wo});
+
+  const isSerial = sns.length > 0;
+  const currentQty = rec.qty != null ? rec.qty : (sns.length || 1);
+  const qtySelect = $('inc-qty-' + id);
+  let arriveQty = currentQty;
+  if(!isSerial && qtySelect){
+    const parsed = parseInt(qtySelect.value, 10);
+    if(parsed > 0 && parsed <= currentQty){
+      arriveQty = parsed;
     }
   }
+
+  const remainingQty = currentQty - arriveQty;
+  const isPartial = !isSerial && remainingQty > 0;
+
+  if(isPartial){
+    rec.qty = remainingQty;
+    await put('incoming', rec);
+  } else {
+    rec.status = 'Arrived';
+    await put('incoming', rec);
+  }
+
+  await commitReceive(rec, arriveQty);
+  await addHistory({action:'Arrived',pn:rec.pn,name:part?part.name:'',sn:sns.join(', '),detail:(sns.length?('Serial '+sns.join(', ')):('Qty '+arriveQty))+' arrived at '+rec.storage,storage:rec.storage,order:rec.order});
+
+  /* update work order part order line if linked */
+  let woLine = null;
+  if(rec.line_id != null){
+    woLine = await getOne('woLines', rec.line_id);
+  } else if(rec.wo){
+    const lines = await getAll('woLines');
+    woLine = lines.find(l => l.wo === rec.wo && l.pn === rec.pn && l.status === 'Waiting part') || null;
+  }
+
+  if(woLine){
+    if(isPartial){
+      const noteText = arriveQty + ' arrived, ' + remainingQty + ' remaining';
+      const updatedNote = woLine.note ? (woLine.note + ' · ' + noteText) : noteText;
+      await put('woLines', Object.assign({}, woLine, {note: updatedNote}));
+      await addHistory({action:'Work order line updated', pn:rec.pn, name:woLine.name||'', detail:'Line on '+rec.wo+' partial delivery: '+noteText, order:rec.wo});
+    } else if(woLine.status === 'Waiting part'){
+      const finalNote = woLine.note ? (woLine.note + ' · ' + arriveQty + ' arrived (all received)') : '';
+      const patch = {status: 'Received'};
+      if(finalNote) patch.note = finalNote;
+      await put('woLines', Object.assign({}, woLine, patch));
+      await addHistory({action:'Work order line updated', pn:rec.pn, name:woLine.name||'', detail:'Line on '+rec.wo+' marked as Received — the parts arrived at '+rec.storage, order:rec.wo});
+    }
+  }
+
   await renderAll();
-  toast('Marked arrived: '+rec.pn+' at '+rec.storage);
+  if(isPartial){
+    toast('Marked arrived: ' + arriveQty + ' of ' + rec.pn + ' at ' + rec.storage + ' (' + remainingQty + ' remaining)');
+  } else {
+    toast('Marked arrived: ' + rec.pn + ' at ' + rec.storage);
+  }
 }
-async function commitReceive(rec){
+async function commitReceive(rec, qtyOverride){
   const sns=splitSns(rec.sn);
   if(sns.length){ for(const sn of sns) await put('serials',{sn,pn:rec.pn,storage:rec.storage,status:'in_stock',machine:'',order:rec.order||'',date:now(),note:''}); }
-  else if(!rec.sn){ const s=await getOne('stock',[rec.pn,rec.storage]); await put('stock',{pn:rec.pn,storage:rec.storage,qty:(s?s.qty:0)+(rec.qty||0)}); }
+  else if(!rec.sn){
+    const addQty = qtyOverride != null ? qtyOverride : (rec.qty || 0);
+    const s=await getOne('stock',[rec.pn,rec.storage]);
+    await put('stock',{pn:rec.pn,storage:rec.storage,qty:(s?s.qty:0)+addQty});
+  }
 }
 async function deleteIncoming(id){
   const rec=await getOne('incoming',id);
@@ -3619,7 +3675,8 @@ async function syncWoLineIncoming(line){
     note:'Part order line for work order '+line.wo
   };
   if(entry){
-    await put('incoming',Object.assign({},entry,{pn:rec.pn,storage:rec.storage,order:rec.order,qty:rec.qty,sn:rec.sn,note:rec.note}));
+    const targetQty = (entry.qty != null && entry.qty < rec.qty) ? entry.qty : rec.qty;
+    await put('incoming',Object.assign({},entry,{pn:rec.pn,storage:rec.storage,order:rec.order,qty:targetQty,sn:rec.sn,note:rec.note}));
     return;
   }
   rec.date=now();
