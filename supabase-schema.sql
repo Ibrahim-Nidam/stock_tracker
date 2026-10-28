@@ -114,7 +114,8 @@ create table if not exists public.wo_lines (
   sn text,
   note text,
   src text,
-  storage text
+  storage text,
+  from_stock integer default 0
 );
 
 -- ---------------------------------------------------------------------
@@ -125,6 +126,7 @@ alter table public.parts    add column if not exists price numeric;
 alter table public.incoming add column if not exists wo text;
 alter table public.incoming add column if not exists line_id bigint;
 alter table public.wo_lines add column if not exists storage text;
+alter table public.wo_lines add column if not exists from_stock integer default 0;
 
 alter table public.parts enable row level security;
 alter table public.storages enable row level security;

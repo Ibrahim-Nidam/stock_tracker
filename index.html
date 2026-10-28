@@ -245,6 +245,7 @@
   /* modals */
   .modal-overlay{position:fixed; inset:0; background:rgba(10,14,18,.55); display:none; align-items:center; justify-content:center; z-index:50; padding:20px}
   .modal-overlay.open{display:flex}
+  #lowStockModalOverlay{z-index:60}
   #confirmOverlay{z-index:70}
   .modal-box{background:var(--bg); border:1px solid var(--line); max-width:440px; width:100%; padding:22px; max-height:90vh; overflow:auto}
   .modal-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; font-weight:700; font-size:15px}
@@ -348,6 +349,59 @@
     .storage-name{padding-right:64px}
     .filter-label{min-width:100%}
   }
+
+  /* Low stock notification banner & modal */
+  .low-stock-banner{display:flex; align-items:center; justify-content:space-between; gap:14px; background:var(--danger-soft); border:1px solid var(--danger); border-left:4px solid var(--danger); padding:12px 16px; margin-bottom:20px; border-radius:4px}
+  .low-stock-banner-content{display:flex; align-items:center; gap:12px; min-width:0}
+  .low-stock-banner-icon{color:var(--danger); display:flex; align-items:center; justify-content:center; flex-shrink:0}
+  .low-stock-banner-text{display:flex; flex-direction:column; gap:2px; min-width:0}
+  .low-stock-banner-title{font-weight:700; font-size:13.5px; color:var(--danger)}
+  .low-stock-banner-sub{font-size:12px; color:var(--muted); line-height:1.3}
+  .low-stock-banner-actions{display:flex; gap:8px; flex-shrink:0}
+  .nav-badge.danger{margin-left:auto; background:var(--danger); color:#fff; font-size:11px; font-weight:700; padding:2px 7px; border-radius:10px; line-height:1.2}
+
+  /* Low stock modal fit content on desktop */
+  #lowStockModalOverlay .modal-box{width:auto; max-width:min(880px, calc(100vw - 32px)); min-width:min(640px, calc(100vw - 32px)); padding:22px}
+  .low-stock-table{width:100%; border-collapse:collapse}
+  .low-stock-table th{text-align:left; font-size:11.5px; font-weight:600; color:var(--muted); padding:8px 12px; border-bottom:1px solid var(--line-soft); white-space:nowrap}
+  .low-stock-table td{padding:10px 12px; font-size:13px; border-bottom:1px solid var(--line-soft); vertical-align:middle}
+  .low-stock-table tr:last-child td{border-bottom:none}
+  .low-stock-table tr.clickrow{cursor:pointer; transition:background .15s ease}
+  .low-stock-table tr.clickrow:hover td{background:var(--hover)}
+
+  /* Blue highlight animation for 2.5s */
+  @keyframes blueBorderPulse {
+    0% {
+      box-shadow: inset 0 0 0 2px #2563eb, 0 0 12px rgba(37,99,235,0.6);
+      background-color: rgba(37,99,235,0.12);
+    }
+    50% {
+      box-shadow: inset 0 0 0 2.5px #3b82f6, 0 0 18px rgba(59,130,246,0.8);
+      background-color: rgba(37,99,235,0.22);
+    }
+    100% {
+      box-shadow: inset 0 0 0 2px #2563eb, 0 0 12px rgba(37,99,235,0.6);
+      background-color: rgba(37,99,235,0.12);
+    }
+  }
+  .hl-blue {
+    animation: blueBorderPulse 0.8s ease-in-out infinite !important;
+    outline: 2px solid #2563eb !important;
+    outline-offset: -1px !important;
+    position: relative !important;
+    z-index: 5 !important;
+  }
+  .hl-blue td {
+    border-top: 2px solid #2563eb !important;
+    border-bottom: 2px solid #2563eb !important;
+    background-color: rgba(37,99,235,0.12) !important;
+  }
+  .hl-blue td:first-child {
+    border-left: 2px solid #2563eb !important;
+  }
+  .hl-blue td:last-child {
+    border-right: 2px solid #2563eb !important;
+  }
 </style>
 </head>
 <body>
@@ -359,7 +413,7 @@
         <button class="nav-btn" data-view="dashboard"><span class="nav-icon"><svg viewBox="0 0 18 18" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="6" height="6"></rect><rect x="10" y="2" width="6" height="6"></rect><rect x="2" y="10" width="6" height="6"></rect><rect x="10" y="10" width="6" height="6"></rect></svg></span><span>Dashboard</span></button>
         -->
         <button class="nav-btn active" data-view="workorders"><span class="nav-icon"><svg viewBox="0 0 18 18" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="3" y="2.5" width="12" height="13" rx="1"></rect><path d="M6 6.5h6M6 9.5h6M6 12.5h3.5" stroke-linecap="round"></path></svg></span><span>Work orders</span></button>
-        <button class="nav-btn" data-view="storage"><span class="nav-icon"><svg viewBox="0 0 18 18" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="14" height="4"></rect><rect x="2" y="7.5" width="14" height="4"></rect><rect x="2" y="13" width="14" height="3"></rect></svg></span><span>Stock</span></button>
+        <button class="nav-btn" data-view="storage"><span class="nav-icon"><svg viewBox="0 0 18 18" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="14" height="4"></rect><rect x="2" y="7.5" width="14" height="4"></rect><rect x="2" y="13" width="14" height="3"></rect></svg></span><span>Stock</span><span class="nav-badge danger" id="lowStockNavBadge" style="display:none">0</span></button>
         <button class="nav-btn" data-view="rma"><span class="nav-icon"><svg viewBox="0 0 18 18" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 8a6 6 0 0 1 10.5-3.8M15 8a6 6 0 0 1-10.5 3.8"></path><path d="M13.5 1.8v2.4H11M4.5 16.2v-2.4H7"></path></svg></span><span>RMA</span></button>
         <button class="nav-btn" data-view="machines"><span class="nav-icon"><svg viewBox="0 0 18 18" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="14" height="12" rx="1"></rect><circle cx="6" cy="8" r="1.1" fill="currentColor" stroke="none"></circle><circle cx="6" cy="11.5" r="1.1" fill="currentColor" stroke="none"></circle><line x1="9.5" y1="8" x2="13.5" y2="8"></line><line x1="9.5" y1="11.5" x2="13.5" y2="11.5"></line></svg></span><span>Machines</span></button>
         <button class="nav-btn" data-view="parts"><span class="nav-icon"><svg viewBox="0 0 18 18" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M9 2 2 5.5v7L9 16l7-3.5v-7L9 2Z"></path><path d="M2 5.5 9 9l7-3.5M9 9v7"></path></svg></span><span>Parts</span></button>
@@ -389,6 +443,7 @@
       </header>
 
       <div class="content">
+
         <!-- Dashboard view commented out
         <section class="view" id="view-dashboard">
           <div class="toolbar full" style="margin-bottom:22px">
@@ -419,6 +474,21 @@
         </section>
 
         <section class="view" id="view-storage">
+          <!-- Low stock notification card (Stock page only) -->
+          <div id="lowStockBanner" class="low-stock-banner" style="display:none">
+            <div class="low-stock-banner-content">
+              <div class="low-stock-banner-icon">
+                <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 2.5L1.5 17.5h17L10 2.5z" stroke-linejoin="round"/><path d="M10 8v4.5M10 15v.5" stroke-linecap="round"/></svg>
+              </div>
+              <div class="low-stock-banner-text">
+                <span class="low-stock-banner-title" id="lowStockBannerText">Low stock threshold reached</span>
+                <span class="low-stock-banner-sub" id="lowStockBannerSub">Stock has fallen to or below the required minimum level.</span>
+              </div>
+            </div>
+            <div class="low-stock-banner-actions">
+              <button type="button" class="btn btn-sm btn-danger" data-act="showLowStock" onclick="showLowStockModal()">View low stock</button>
+            </div>
+          </div>
           <div id="storageContent"></div>
         </section>
 
@@ -466,6 +536,44 @@
       <div class="modal-head"><span id="confirmTitle">Are you sure?</span></div>
       <p class="confirm-msg" id="confirmMsg"></p>
       <div class="modal-actions"><button type="button" class="btn btn-ghost" id="confirmCancel">Cancel</button><button type="button" class="btn btn-primary" id="confirmOk">Confirm</button></div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="lowStockModalOverlay" role="dialog" aria-modal="true" aria-labelledby="lowStockModalTitle">
+    <div class="modal-box">
+      <div class="modal-head">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="color:var(--danger);display:flex">
+            <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 2.5L1.5 17.5h17L10 2.5z" stroke-linejoin="round"/><path d="M10 8v4.5M10 15v.5" stroke-linecap="round"/></svg>
+          </span>
+          <span id="lowStockModalTitle" style="font-weight:700">Low Stock Threshold</span>
+          <span class="tag tag-danger" id="lowStockModalCount" style="margin-left:4px">0</span>
+        </div>
+        <button class="modal-close" type="button" data-act="closeLowStock" onclick="closeLowStockModal()" aria-label="Close">&times;</button>
+      </div>
+      <p class="helper-note" style="margin:0 0 14px;font-size:12.5px;line-height:1.45">
+        The following parts have reached or fallen below their minimum required threshold. Click any row to jump directly to that stock location.
+      </p>
+      <div class="table-scroll" style="max-height:58vh;overflow-y:auto">
+        <table class="low-stock-table">
+          <thead>
+            <tr>
+              <th style="white-space:nowrap;width:1%">Part number</th>
+              <th>Name</th>
+              <th style="white-space:nowrap">Stock location</th>
+              <th style="white-space:nowrap;width:1%">Left in stock</th>
+              <th style="white-space:nowrap;width:1%">Min required</th>
+              <th style="width:1%"></th>
+            </tr>
+          </thead>
+          <tbody id="lowStockModalBody">
+          </tbody>
+        </table>
+      </div>
+      <div class="modal-actions" style="margin-top:16px;display:flex;justify-content:space-between;align-items:center">
+        <span class="hint" style="font-size:11.5px">Stays active until threshold is updated or stock is replenished.</span>
+        <button type="button" class="btn btn-ghost" data-act="closeLowStock" onclick="closeLowStockModal()">Close</button>
+      </div>
     </div>
   </div>
 
@@ -531,7 +639,7 @@ const CLOUD_TABLES={
   machines:{table:'machines',fields:['name','group']},
   machineGroups:{table:'machine_groups',fields:['name']},
   workorders:{table:'workorders',fields:['wo','machine','type','status','po','opened','closed','note','src']},
-  woLines:{table:'wo_lines',fields:['id','wo','pn','name','qty','status','sn','note','src','storage']}
+  woLines:{table:'wo_lines',fields:['id','wo','pn','name','qty','status','sn','note','src','storage','from_stock']}
 };
 const ALL='__all__', NONE='__none__';
 let modalType=null, modalCtx={}, currentStorageView=null;
@@ -1360,6 +1468,7 @@ function refreshView(view){
 async function renderAll(){
   await refreshView(activeView());
   updateHeader();
+  await checkLowStockNotification();
 }
 
 /* ---------- history (shared row + filters + lazy loading) ---------- */
@@ -1615,7 +1724,7 @@ async function renderStorageDetail(name){
     const open=shown>0;
     const visible=list.slice(0,shown);
     const usableBtn=(s)=>s.doa||s.rma?'<button type="button" class="btn btn-ghost btn-sm" disabled title="DOA or RMA serials can’t be used">Unavailable</button>':'<button type="button" class="btn btn-ghost btn-sm" data-act="useSerial" '+da({pn:p.pn,sn:s.sn})+'>Use</button>';
-    let out='<tr class="serial-summary-row'+(open?' open':'')+'" data-act="toggleSerial" '+da({pn:p.pn})+'>'
+    let out='<tr class="serial-summary-row stock-part-row'+(open?' open':'')+'" data-pn="'+esc(p.pn)+'" data-act="toggleSerial" '+da({pn:p.pn})+'>'
       +'<td><span class="id-cell mono"><span class="chev">'+ICON_CHEV+'</span>'+esc(p.pn)+copyBtn(p.pn)+'</span></td>'
       +'<td>'+esc(p.name)+'</td>'
       +'<td class="mono strong">'+list.length+'</td>'
@@ -1644,8 +1753,8 @@ async function renderStorageDetail(name){
   const otherRows=otherParts.map(p=>{
     const rec=stock.find(s=>s.pn===p.pn&&s.storage===name);
     const qty=rec?rec.qty:0;
-    if(!qty) return '';
-    return '<tr><td><span class="id-cell mono">'+esc(p.pn)+copyBtn(p.pn)+'</span></td><td>'+esc(p.name)+'</td><td><span class="badge badge-'+p.type+'">'+labelType(p.type)+'</span></td><td class="mono strong">'+qty+'</td>'
+    if(!qty && (!targetPn || targetPn !== p.pn) && !rec) return '';
+    return '<tr class="stock-part-row" data-pn="'+esc(p.pn)+'"><td><span class="id-cell mono">'+esc(p.pn)+copyBtn(p.pn)+'</span></td><td>'+esc(p.name)+'</td><td><span class="badge badge-'+p.type+'">'+labelType(p.type)+'</span></td><td class="mono strong">'+qty+(p.min>0&&qty<=p.min?' <span class="tag tag-low">LOW</span>':'')+'</td>'
       +'<td class="actions-cell"><div class="row-actions"><button type="button" class="btn btn-ghost btn-sm" data-act="usePart" '+da({pn:p.pn,storage:name})+'>Use</button>'
       +'<button type="button" class="btn btn-ghost btn-sm" data-act="moveStock" '+da({pn:p.pn,storage:name})+'>Move</button>'
       +'<button type="button" class="btn btn-ghost btn-sm" data-act="editStock" '+da({pn:p.pn,storage:name})+'>Edit</button></div></td></tr>';
@@ -1663,11 +1772,13 @@ async function renderStorageDetail(name){
     +(storageDetailMode==='serial'?serialTable:otherTable);
   updateHeader();
 }
+let targetPn=null;
 async function openStorageDetail(name,o){
   o=o||{};
   currentStorageView=name;
   serialExpand={};
   storageDetailMode=o.mode||'serial';
+  targetPn=o.pn||null;
   if(o.pn) serialExpand[o.pn]=10;
   await renderStorageView();
   updateHeader();
@@ -2251,6 +2362,7 @@ function snPickChange(sel){
   const input=$(sel.id.replace('pick_',''));
   if(input&&sel.value) input.value=sel.value;
   refreshSnPicks(sel.dataset.set||'f_snSet');
+  if(modalType==='woline') updateWoLineSerialFromStockCount();
 }
 /* hide serials that are already used by another row, so the same unit can’t be picked twice */
 function refreshSnPicks(setId){
@@ -2265,7 +2377,10 @@ function refreshSnPicks(setId){
       const v=o.value.toLowerCase();
       o.hidden=chosen.has(v)&&v!==cur;
     });
-    if(paired&&sel.value.toLowerCase()!==cur) sel.value='';
+    if(paired&&sel.value.toLowerCase()!==cur){
+      const match=Array.from(sel.options).find(o=>o.value.toLowerCase()===cur);
+      sel.value=match?match.value:'';
+    }
   });
 }
 async function onReceivePartChange(){
@@ -2658,7 +2773,7 @@ async function exportCSV(){
     d.incoming.forEach(i=>push({record_type:'INCOMING',pn:i.pn,storage:i.storage,order:i.order,qty:i.qty,sn:i.sn,status:i.status,date:i.date,note:i.note,wo:i.wo||'',line_id:i.line_id==null?'':i.line_id}));
     d.rma.forEach(r=>push({record_type:'RMA',pn:r.pn,order:r.order,old:r.old,new:r.new,machine:r.machine,status:r.status,date:r.date,ts:r.ts,new_created:r.newCreated?1:'',wo:r.wo,note:r.note}));
     d.workorders.forEach(w=>push({record_type:'WORKORDER',wo:w.wo,machine:w.machine,wotype:w.type,status:w.status,po:w.po,opened:w.opened,closed:w.closed,note:w.note,src:w.src}));
-    d.woLines.forEach(l=>push({record_type:'WO_LINE',wo:l.wo,pn:l.pn,name:l.name,qty:l.qty,line_status:l.status,sn:l.sn,note:l.note,src:l.src,storage:l.storage||''}));
+    d.woLines.forEach(l=>push({record_type:'WO_LINE',wo:l.wo,pn:l.pn,name:l.name,qty:l.qty,line_status:l.status,sn:l.sn,note:l.note,src:l.src,storage:l.storage||'',from_stock:l.from_stock||0}));
     d.history.forEach(h=>push({record_type:'HISTORY',pn:h.pn,name:h.name,sn:h.sn,date:h.date,ts:h.ts,action:h.action,detail:h.detail,machine:h.machine,storage:h.storage,order:h.order}));
     const blob=new Blob(['\uFEFF'+rows.join('\r\n')],{type:'text/csv;charset=utf-8'});
     const a=document.createElement('a');
@@ -2737,7 +2852,7 @@ function parseBackup(text){
       case 'INCOMING': if(o.pn){ const i={pn:o.pn,storage:o.storage,order:o.order,qty:o.sn?(intOrNull(o.qty)):(parseInt(o.qty,10)||1),sn:o.sn||null,status:o.status||'Waiting',date:o.date||''}; if(o.note) i.note=o.note; if(o.wo) i.wo=o.wo; const lid=intOrNull(o.line_id); if(lid!==null) i.line_id=lid; d.incoming.push(i); } break;
       case 'RMA': if(o.old||o.new||o.order) d.rma.push({pn:o.pn||'',order:o.order||'',old:o.old||'',new:o.new||'',machine:o.machine||'',status:o.status||'Replaced',date:o.date||'',ts:parseInt(o.ts,10)||0,newCreated:o.new_created==='1',wo:o.wo||'',note:o.note||''}); break;
       case 'WORKORDER': if(o.wo) d.workorders.push({wo:o.wo.toUpperCase(),machine:o.machine||'',type:o.wotype||'Corrective',status:o.status||'In progress',po:o.po||'',opened:o.opened||'',closed:o.closed||'',note:o.note||'',src:o.src||''}); break;
-      case 'WO_LINE': if(o.wo&&o.pn) d.woLines.push({wo:o.wo.toUpperCase(),pn:o.pn,name:o.name||'',qty:intOrNull(o.qty),status:o.line_status||'Waiting part',sn:o.sn||'',note:o.note||'',src:o.src||'',storage:o.storage||''}); break;
+      case 'WO_LINE': if(o.wo&&o.pn) d.woLines.push({wo:o.wo.toUpperCase(),pn:o.pn,name:o.name||'',qty:intOrNull(o.qty),status:o.line_status||'Waiting part',sn:o.sn||'',note:o.note||'',src:o.src||'',storage:o.storage||'',from_stock:intOrNull(o.from_stock)||0}); break;
       case 'HISTORY': d.history.push({pn:o.pn||'—',name:o.name||'',sn:o.sn||'',action:o.action||'',detail:o.detail||'',machine:o.machine||'',storage:o.storage||'',order:o.order||'',date:o.date||'',ts:parseInt(o.ts,10)||parseHistDate(o.date)||0}); break;
     }
   });
@@ -2802,6 +2917,9 @@ $('cloudSyncBtn').addEventListener('click',syncToSupabase);
 
 /* ---------- click / key delegation ---------- */
 const ACTIONS={
+  showLowStock:()=>showLowStockModal(),
+  closeLowStock:()=>closeLowStockModal(),
+  goStockHighlight:d=>goToStockAndHighlight(d.storage,d.pn),
   copy:(d,el)=>copyText(el,d.text),
   scan:d=>openScanner(d.target),
   seeHistory:()=>switchView('history'),
@@ -2864,6 +2982,7 @@ document.addEventListener('keydown',e=>{
     if(confirmResolve) confirmResolve(false);
     else if($('scannerOverlay').classList.contains('open')) closeScanner();
     else if($('modalOverlay').classList.contains('open')) closeModal(true);
+    else if($('lowStockModalOverlay') && $('lowStockModalOverlay').classList.contains('open')) closeLowStockModal();
     return;
   }
   if((e.key==='Enter'||e.key===' ') && e.target.matches && e.target.matches('[role=button][data-act]')){
@@ -2912,6 +3031,7 @@ $('refreshBtn').addEventListener('click',async e=>{
   finally{ b.disabled=false; }
 });
 $('modalOverlay').addEventListener('click',e=>{ if(e.target.id==='modalOverlay') closeModal(true); });
+$('lowStockModalOverlay').addEventListener('click',e=>{ if(e.target.id==='lowStockModalOverlay') closeLowStockModal(); });
 $('scannerOverlay').addEventListener('click',e=>{ if(e.target.id==='scannerOverlay') closeScanner(); });
 
 /* ======================================================================
@@ -2920,12 +3040,14 @@ $('scannerOverlay').addEventListener('click',e=>{ if(e.target.id==='scannerOverl
 const STORE_NAMES=['parts','storages','stock','serials','incoming','rma','history','machines','machineGroups','workorders','woLines'];
 const WO_STATUSES=['In progress','Work complete','Work stopped'];
 const WO_TYPES=['Corrective','Preventive','Other'];
-const LINE_STATUSES=['Waiting part','Received'];
+const LINE_STATUSES=['Waiting part','From stock','Received'];
 let woFilter='active', woMachineFilter='', woRangeKey='all', woExpandedWO=null;
 /* multi select for the xlsx export: the mode, the chosen work orders and the list as it is shown */
 let woSelectMode=false, woSelected=new Set(), woVisibleWOs=[];
 /* the part and serial lists loaded into the part order (work order line) form */
 let woLineParts=[], woLineSerials=[];
+/* stock data loaded into the part order (work order line) form */
+let woLineStock=[];
 const WO_RANGES=[['all','Any time'],['today','Today'],['7d','Last 7 days'],['30d','Last 30 days'],['90d','Last 90 days'],['year','This year']];
 /* on desktop the work order details open inline under the row, on smaller screens in a modal */
 function woDetailIsInline(){ try{ return window.matchMedia('(min-width:821px)').matches; }catch(e){ return window.innerWidth>820; } }
@@ -2961,13 +3083,17 @@ async function infoDialog(title,message){
 /* ---------- work orders view ---------- */
 /* the work order details (info, part lines, usage) — used inline on desktop and in the modal on small screens */
 /* the line status gets a colour so it can be scanned at a glance */
-function woLineTag(st){
-  const cls={'Waiting part':'tag-warn','Received':'tag-installed'}[st]||'';
-  return '<span class="tag '+cls+'" style="margin-left:0">'+esc(st||'—')+'</span>';
+function woLineTag(st, l){
+  let badge = '';
+  if (l && l.from_stock && l.from_stock > 0 && l.from_stock < l.qty) {
+    badge = ' <span class="tag tag-installed" style="margin-left:4px" title="'+l.from_stock+' from stock, '+(l.qty-l.from_stock)+' ordered">'+l.from_stock+' from stock</span>';
+  }
+  const cls={'Waiting part':'tag-warn','Received':'tag-installed','From stock':'tag-installed'}[st]||'';
+  return '<span class="tag '+cls+'" style="margin-left:0">'+esc(st||'—')+'</span>' + badge;
 }
-/* lines waiting for their part always come first, then the received ones (oldest first) */
-const LINE_ORDER={'Waiting part':0,'Received':1};
-function lineSortKey(l){ return LINE_ORDER[l.status]==null?2:LINE_ORDER[l.status]; }
+/* lines waiting for their part always come first, then from stock, then received ones (oldest first) */
+const LINE_ORDER={'Waiting part':0,'From stock':1,'Received':2};
+function lineSortKey(l){ return LINE_ORDER[l.status]==null?3:LINE_ORDER[l.status]; }
 /* today as a yyyy-mm-dd value for the date inputs */
 /* completing the work order stamps the current date and time into Closed — it stays editable afterwards */
 function onWoStatusChange(){
@@ -2983,11 +3109,11 @@ async function woDetailHTML(wo,hideHead){
   const ls=lines.filter(l=>l.wo===w.wo).sort((a,b)=>lineSortKey(a)-lineSortKey(b)||a.id-b.id);
   const used=hist.filter(h=>h.order===w.wo&&/^used|^rma/i.test(h.action||''));
   const kv=(k,v)=>'<div><span>'+k+'</span><b>'+v+'</b></div>';
-  return (hideHead?'':'<div class="info-block">'+kv('Machine',esc(w.machine||'—'))+kv('Type',esc(w.type||'—'))+kv('Status',woTag(w.status))+kv('Opened',esc(fmtDT(w.opened)||'—'))+kv('Days open',woDaysOpen(w))+kv('Closed',esc(fmtDT(w.closed)||'—'))+kv('Part order',esc(w.po||'—'))+'</div>')
+  return (hideHead?'':'<div class="info-block">'+kv('Machine',esc(w.machine||'—'))+kv('Type',esc(w.type||'—'))+kv('Status',woTag(w.status))+kv('Opened',esc(fmtDT(w.opened)||'—'))+kv('Days open',woDaysOpen(w))+kv('Closed',esc(fmtDT(w.closed)||'—'))+kv('Part order',w.po?('<span class="mono">'+esc(w.po)+'</span>'+copyBtn(w.po)):esc(ls.length&&ls.every(l=>l.status==='From stock')?'None (all from stock)':'—'))+'</div>')
     +(w.note?'<p class="helper-note" style="margin:0 0 12px"><b>Note:</b> '+esc(w.note)+'</p>':'')
     +'<div class="toolbar" style="margin:6px 0 8px"><h3 class="section-title" style="margin:0;font-size:14px">Parts on this work order</h3><button type="button" class="btn btn-ghost btn-sm" data-act="woAddLine" data-wo="'+esc(w.wo)+'">+ Add line</button></div>'
     +'<div class="table-scroll"><table class="history-table"><thead><tr><th>Part</th><th>Name</th><th>Qty</th><th>Status</th><th>Storage</th><th>Serials / note</th><th></th></tr></thead><tbody>'
-    +(ls.length?ls.map(l=>'<tr><td class="mono">'+esc(l.pn)+'</td><td>'+esc(l.name||'')+'</td><td class="mono">'+esc(l.qty==null?'—':l.qty)+'</td><td>'+woLineTag(l.status)+'</td><td>'+esc(l.storage||'—')+'</td><td>'+esc([l.sn,l.note].filter(Boolean).join(' · ')||'—')+'</td><td class="actions-cell"><div class="row-actions">'+iconBtn('woEditLine',{id:l.id},ICON_EDIT,'Edit line')+iconBtn('woDelLine',{id:l.id},ICON_TRASH,'Delete line',true)+'</div></td></tr>').join(''):emptyRow(7,'No parts on this work order yet.'))
+    +(ls.length?ls.map(l=>'<tr><td><span class="id-cell mono">'+esc(l.pn)+copyBtn(l.pn)+'</span></td><td>'+esc(l.name||'')+'</td><td class="mono">'+esc(l.qty==null?'—':l.qty)+'</td><td>'+woLineTag(l.status, l)+'</td><td>'+esc(l.storage||'—')+'</td><td>'+esc([l.sn,l.note].filter(Boolean).join(' · ')||'—')+'</td><td class="actions-cell"><div class="row-actions">'+iconBtn('woEditLine',{id:l.id},ICON_EDIT,'Edit line')+iconBtn('woDelLine',{id:l.id},ICON_TRASH,'Delete line',true)+'</div></td></tr>').join(''):emptyRow(7,'No parts on this work order yet.'))
     +'</tbody></table></div>'
     +(used.length?'<p class="helper-note" style="margin-top:12px">Usage logged against this work order: '+used.map(h=>esc(h.pn)+' ('+esc(fmtDT(h.date)||'—')+')').join(', ')+'</p>':'')
     +(w.src?'<p class="helper-note" style="margin-top:12px">Imported from: '+esc(w.src)+'</p>':'');
@@ -3015,7 +3141,7 @@ async function renderWorkOrders(){
     const open=woExpandedWO===w.wo;
     let out='<tr class="clickrow'+(open?' open':'')+'" data-act="woOpen" data-wo="'+esc(w.wo)+'" aria-expanded="'+open+'">'
       +(woSelectMode?'<td class="wo-check-cell"><input type="checkbox" data-act="woCheck" data-wo="'+esc(w.wo)+'" aria-label="Select '+esc(w.wo)+'"'+(woSelected.has(w.wo)?' checked':'')+'></td>':'')
-      +'<td><span class="id-cell mono"><span class="chev">'+ICON_CHEV+'</span>'+esc(w.wo)+copyBtn(w.wo)+'</span></td><td>'+esc(w.machine||'—')+'</td><td>'+esc(w.type||'—')+'</td><td>'+woTag(w.status)+'</td><td class="nowrap">'+esc(fmtDT(w.opened)||'—')+'</td><td class="nowrap">'+esc(fmtDT(w.closed)||'—')+'</td><td class="mono">'+esc(w.po||'—')+'</td><td class="mono">'+(cnt[w.wo]||0)+'</td>'
+      +'<td><span class="id-cell mono"><span class="chev">'+ICON_CHEV+'</span>'+esc(w.wo)+copyBtn(w.wo)+'</span></td><td>'+esc(w.machine||'—')+'</td><td>'+esc(w.type||'—')+'</td><td>'+woTag(w.status)+'</td><td class="nowrap">'+esc(fmtDT(w.opened)||'—')+'</td><td class="nowrap">'+esc(fmtDT(w.closed)||'—')+'</td><td class="mono">'+(w.po?('<span class="id-cell mono">'+esc(w.po)+copyBtn(w.po)+'</span>'):(cnt[w.wo]>0&&lines.filter(l=>l.wo===w.wo).every(l=>l.status==='From stock')?'<span class="tag tag-installed" style="font-size:11px">From stock</span>':'—'))+'</td><td class="mono">'+(cnt[w.wo]||0)+'</td>'
       +'<td class="mono nowrap" title="Days this work order has been open">'+woDaysOpen(w)+'</td>'
       +'<td class="actions-cell"><div class="row-actions">'+iconBtn('woEdit',{wo:w.wo},ICON_EDIT,'Edit work order')+iconBtn('woDel',{wo:w.wo},ICON_TRASH,'Delete work order',true)+'</div></td></tr>';
     if(open) out+='<tr class="wo-expand-row"><td colspan="'+cols+'"><div class="wo-expand-inner">'+await woDetailHTML(w.wo,true)+'</div></td></tr>';
@@ -3213,13 +3339,13 @@ async function generateWoXlsx(){
         {v:first?w.wo:'',s:first?XLS_ID:XLS_BOX},
         {v:first?(w.machine||''):'',s:XLS_BOX},
         {v:first?(w.status||''):'',s:XLS_BOX},
-        {v:first?(w.po||''):'',s:XLS_BOX},
+        {v:first?(w.po||(ls.length&&ls.every(x=>x.status==='From stock')?'From stock':'')):'',s:XLS_BOX},
         {v:l?l.pn:'',s:XLS_BOX},
         {v:l?(l.name||''):'',s:XLS_BOX},
         {v:l&&l.qty!=null?l.qty:'',s:XLS_BOX},
         sn.nw,
         sn.def,
-        {v:l?(l.status||''):'',s:XLS_BOX}
+        {v:l?(l.from_stock&&l.from_stock>0&&l.from_stock<l.qty?(l.status+' ('+l.from_stock+' from stock)'):(l.status||'')):'',s:XLS_BOX}
       ];
       let received={v:'',s:XLS_BOX};
       if(l&&l.status==='Received'){
@@ -3318,17 +3444,19 @@ openModal=async function(type,ctx){
       +'<div class="field"><label>Status</label><select id="f_status" onchange="onWoStatusChange()">'+optList(WO_STATUSES,cur.status)+'</select></div>'
       +'<div class="field"><label>Opened (date and time)</label><input id="f_opened" type="datetime-local" value="'+esc(toDTInput(cur.opened||''))+'"></div>'
       +'<div class="field"><label>Closed (date and time)</label><input id="f_closed" type="datetime-local" value="'+esc(toDTInput(w?w.closed||'':''))+'"><p class="helper-note">Fills in the current date and time when the status is “Work complete”.</p></div>'
-      +'<div class="field"><label>Part order number</label><input id="f_po" value="'+esc(w?w.po||'':'')+'" placeholder="Filled automatically when you add the first line"></div>'
+      +'<div class="field"><label>Part order number</label><input id="f_po" value="'+esc(w?w.po||'':'')+'" placeholder="Filled automatically if any parts are ordered"><p class="helper-note">Leave empty if parts will be used from stock. A part order number is created automatically only when parts are ordered.</p></div>'
       +'<div class="field"><label>Note</label><input id="f_note" value="'+esc(w?w.note||'':'')+'"></div>';
   } else if(type==='woline'){
-    const [parts,l,storages,serials]=await Promise.all([getAll('parts'),ctx.id?getOne('woLines',ctx.id):Promise.resolve(null),getAll('storages'),getAll('serials')]);
+    const [parts,l,storages,serials,stock]=await Promise.all([getAll('parts'),ctx.id?getOne('woLines',ctx.id):Promise.resolve(null),getAll('storages'),getAll('serials'),getAll('stock')]);
     if(ctx.id&&!l) return block('This line no longer exists.');
+    modalCtx.line=l;
     if(!storages.length) return block('Add a storage first — every line has to say which storage the part goes into.');
     $('modalTitle').textContent=ctx.id?'Edit line':'Add part order line';
     $('modalSubmitBtn').textContent=ctx.id?'Save changes':'Add line';
     const cur=l||{status:'Waiting part'};
     woLineParts=parts.slice().sort((a,b)=>String(a.pn).localeCompare(String(b.pn)));
     woLineSerials=serials;
+    woLineStock=stock;
     const opts=woLineParts.map(p=>'<option value="'+esc(p.pn)+'" data-type="'+p.type+'" data-search="'+esc((p.pn+' '+p.name).toLowerCase())+'">'+esc(p.pn)+' — '+esc(p.name)+'</option>').join('');
     body.innerHTML='<div class="field"><label for="f_filter">Find a part</label><input id="f_filter" type="search" placeholder="Filter the list by part number or name" oninput="filterWoLineParts()"></div>'
       +'<div class="field"><div class="pick-row">'
@@ -3337,14 +3465,17 @@ openModal=async function(type,ctx){
       +'</div></div>'
       +'<div class="field" id="f_typeWrap" style="display:none"><label>Part type (this part number isn’t in the parts list yet)</label><select id="f_type" onchange="renderWoLineSnRows()"><option value="nonserialised">Non-serialised</option><option value="serialised">Serialised</option><option value="consumable">Consumable</option></select></div>'
       +'<div class="field"><label>Name</label><input id="f_name" value="'+esc(l?l.name||'':'')+'" placeholder="Filled from the part if left empty"></div>'
-      +'<div class="field"><label>Quantity</label><input id="f_qty" type="number" min="1" value="'+esc(l&&l.qty!=null?l.qty:'1')+'" oninput="onWoLineQtyChange()"></div>'
+      +'<div class="field"><label>Storage</label><select id="f_storage" onchange="onWoLineStorageChange()">'+storages.map(s=>'<option value="'+esc(s.name)+'"'+(l&&l.storage===s.name?' selected':'')+'>'+esc(s.name)+'</option>').join('')+'</select></div>'
+      +'<div class="field"><label>Quantity</label><input id="f_qty" type="number" min="1" value="'+esc(l&&l.qty!=null?l.qty:'1')+'" oninput="onWoLineQtyChange()">'
+      +'<p class="helper-note" id="f_stockNote" style="margin:4px 0 0"></p></div>'
+      +'<div class="field" id="f_fromStockWrap"><label>Use from stock</label><input id="f_from_stock" type="number" min="0" value="'+esc(l&&l.from_stock!=null?l.from_stock:'0')+'" oninput="onWoLineFromStockChange()">'
+      +'<p class="helper-note" id="f_fromStockNote" style="margin:4px 0 0">Leave at 0 to order everything, or enter how many units to pull from your stock.</p></div>'
       +'<div class="field" id="f_snWrap" style="display:none"><label>Serial numbers — one row per unit ordered</label><div id="f_snSet"></div></div>'
       /* the affected (faulty) serial is only asked for on a new line — that is what the automatic RMA is raised against */
       +(ctx.id?'':'<datalist id="f_affectedList"></datalist>')
-      +'<div class="field"><label>Storage</label><select id="f_storage">'+storages.map(s=>'<option value="'+esc(s.name)+'"'+(l&&l.storage===s.name?' selected':'')+'>'+esc(s.name)+'</option>').join('')+'</select></div>'
-      +'<div class="field"><label>Line status</label><select id="f_status">'+optList(LINE_STATUSES,cur.status)+'</select></div>'
+      +'<div class="field"><label>Line status</label><select id="f_status" onchange="onWoLineStatusManualChange()">'+optList(LINE_STATUSES,cur.status)+'</select></div>'
       +'<div class="field"><label>Note</label><input id="f_note" value="'+esc(l?l.note||'':'')+'"></div>';
-    await onWoLinePnChanged({prefill:splitSns(l&&l.sn?l.sn:'')});
+    await onWoLinePnChanged(splitSns(l&&l.sn?l.sn:''));
   } else {
     /* small screens only — on desktop the details open inline under the row */
     const w=await getOne('workorders',ctx.wo);
@@ -3386,10 +3517,92 @@ function woLineIsSerial(){
   const t=$('f_type');
   return !!t&&t.value==='serialised';
 }
-/* serial numbers of this part that are already in Stocktrack, never the RMA units, sorted by S/N */
+/* serial numbers of this part that are already in Stocktrack and in stock, sorted by S/N */
 function woLineExistingSns(){
   const pn=(($('f_pn')||{}).value||'').trim();
-  return woLineSerials.filter(s=>s.pn===pn&&!s.rma).map(s=>String(s.sn)).sort((a,b)=>a.localeCompare(b));
+  const st=(($('f_storage')||{}).value||'').trim();
+  const curSns = new Set(modalCtx.line && modalCtx.line.sn ? splitSns(modalCtx.line.sn).map(s=>s.toLowerCase()) : []);
+  return woLineSerials.filter(s=>s.pn===pn&&(!s.rma)&&(!s.doa)&&(isUsableInStockSerial(s)||curSns.has(String(s.sn).toLowerCase()))&&(!st||s.storage===st)).map(s=>String(s.sn)).sort((a,b)=>a.localeCompare(b));
+}
+function updateWoLineStockNote(){
+  const pn=(($('f_pn')||{}).value||'').trim();
+  const storage=(($('f_storage')||{}).value||'').trim();
+  const note=$('f_stockNote');
+  if(!note) return;
+  if(!pn){ note.textContent=''; return; }
+  const part=woLinePart(pn);
+  const isSerial=part?part.type==='serialised':woLineIsSerial();
+  let inStore=0, inTotal=0;
+  if(isSerial){
+    inStore=woLineSerials.filter(s=>s.pn===pn&&isUsableInStockSerial(s)&&s.storage===storage).length;
+    inTotal=woLineSerials.filter(s=>s.pn===pn&&isUsableInStockSerial(s)).length;
+  } else {
+    inStore=woLineStock.filter(s=>s.pn===pn&&s.storage===storage).reduce((a,s)=>a+s.qty,0);
+    inTotal=woLineStock.filter(s=>s.pn===pn).reduce((a,s)=>a+s.qty,0);
+  }
+  note.innerHTML='Available in '+esc(storage||'storage')+': <b>'+inStore+'</b> unit'+(inStore===1?'':'s')+(inTotal!==inStore?' (total across all storages: <b>'+inTotal+'</b>)':'');
+  const fsw=$('f_fromStockWrap');
+  if(fsw) fsw.style.display=isSerial?'none':'block';
+  onWoLineFromStockChange();
+}
+function onWoLineStorageChange(){
+  updateWoLineStockNote();
+  const isSerial=woLineIsSerial();
+  if(isSerial) renderWoLineSnRows(snValues('f_snSet'));
+}
+function onWoLineFromStockChange(){
+  const fsw=$('f_from_stock'); if(!fsw) return;
+  const isSerial=woLineIsSerial();
+  if(isSerial) return;
+  const qty=Math.max(1,parseInt(($('f_qty')||{}).value,10)||1);
+  let fs=parseInt(fsw.value,10);
+  if(isNaN(fs)||fs<0){ fs=0; fsw.value='0'; }
+  if(fs>qty){ fs=qty; fsw.value=String(qty); }
+  const note=$('f_fromStockNote');
+  const st=$('f_status');
+  if(fs===qty){
+    if(note) note.innerHTML='<b>All '+qty+' unit'+(qty===1?'':'s')+'</b> will be taken from stock. No part order will be sent to Incoming.';
+    if(st&&st.value==='Waiting part') st.value='From stock';
+  } else if(fs>0){
+    if(note) note.innerHTML='<b>'+fs+'</b> from stock, <b>'+(qty-fs)+'</b> ordered new (logged in Incoming).';
+    if(st&&st.value==='From stock') st.value='Waiting part';
+  } else {
+    if(note) note.textContent='Leave at 0 to order everything, or enter how many units to pull from your stock.';
+    if(st&&st.value==='From stock') st.value='Waiting part';
+  }
+}
+function onWoLineStatusManualChange(){
+  const st=$('f_status'); if(!st) return;
+  const isSerial=woLineIsSerial();
+  if(isSerial) return;
+  const fsw=$('f_from_stock');
+  const qty=Math.max(1,parseInt(($('f_qty')||{}).value,10)||1);
+  if(st.value==='From stock'&&fsw&&parseInt(fsw.value,10)===0){
+    fsw.value=String(qty);
+    onWoLineFromStockChange();
+  } else if(st.value==='Waiting part'&&fsw&&parseInt(fsw.value,10)===qty){
+    fsw.value='0';
+    onWoLineFromStockChange();
+  }
+}
+function updateWoLineSerialFromStockCount(){
+  const isSerial=woLineIsSerial();
+  if(!isSerial) return;
+  const vals=snValues('f_snSet');
+  const inStockSet=new Set(woLineSerials.filter(isUsableInStockSerial).map(s=>s.sn.toLowerCase()));
+  let fromStock=0;
+  vals.forEach(s=>{ if(inStockSet.has(s.toLowerCase())) fromStock++; });
+  const fsw=$('f_from_stock');
+  if(fsw) fsw.value=String(fromStock);
+  const st=$('f_status');
+  const qty=Math.max(1,parseInt(($('f_qty')||{}).value,10)||vals.length||1);
+  if(st){
+    if(fromStock===qty&&qty>0){
+      if(st.value==='Waiting part') st.value='From stock';
+    } else if(fromStock<qty){
+      if(st.value==='From stock') st.value='Waiting part';
+    }
+  }
 }
 /* Serial numbers for a part order line: one row per unit ordered, carrying the
    new serial (the replacement) and, on a new line, the faulty serial it takes
@@ -3404,7 +3617,8 @@ function renderWoLineSnRows(prefill){
   /* the affected serial is only asked for on a new line — an existing line keeps
      the pairs it was created with */
   const showAff=!modalCtx.id&&!!$('f_affectedList');
-  const keepNw=(prefill&&prefill.length)?prefill:snValues('f_snSet');
+  const preArr = Array.isArray(prefill) ? prefill : (prefill && Array.isArray(prefill.prefill) ? prefill.prefill : null);
+  const keepNw=(preArr&&preArr.length)?preArr:snValues('f_snSet');
   const keepAff=affValues();
   const qty=Math.max(0,parseInt(($('f_qty')||{}).value,10)||0);
   const picks=woLineExistingSns();
@@ -3430,11 +3644,12 @@ function renderWoLineSnRows(prefill){
   keepNw.forEach((v,i)=>{ const el=$('f_snSet_'+i); if(el&&v) el.value=v; });
   keepAff.forEach((v,i)=>{ const el=$('f_aff_'+i); if(el&&v) el.value=v; });
   refreshSnPicks('f_snSet');
+  if(modalType==='woline') updateWoLineSerialFromStockCount();
 }
 /* every affected serial that has been typed in, in row order */
 function affValues(){
   const set=$('f_snSet');
-  return set?Array.from(set.querySelectorAll('input[data-aff]')).map(i=>i.value.trim()).filter(Boolean):[];
+  return set?Array.from(set.querySelectorAll('input[data-aff]')).map(i=>i.value.trim()):[];
 }
 /* the pairs the rows describe: only rows with an affected serial are a pair, and
    each keeps the new serial from its own row so the two stay linked */
@@ -3452,8 +3667,10 @@ function woLineSnPairs(){
 function clearAffectedErr(){ const err=$('f_affected_err'); if(err) err.textContent=''; }
 function onWoLineQtyChange(){
   const wrap=$('f_snWrap');
-  if(!wrap||wrap.style.display==='none') return;
-  renderWoLineSnRows(snValues('f_snSet'));
+  if(wrap&&wrap.style.display!=='none'){
+    renderWoLineSnRows(snValues('f_snSet'));
+  }
+  onWoLineFromStockChange();
 }
 async function onWoLinePnChanged(prefill){
   const pn=(($('f_pn')||{}).value||'').trim();
@@ -3467,6 +3684,7 @@ async function onWoLinePnChanged(prefill){
   if(pin) pin.size=Math.max(14,((pin.value||pin.placeholder||'').length)+2);
   filterWoLineParts();
   renderWoLineSnRows(prefill);
+  updateWoLineStockNote();
 }
 
 async function saveWo(){
@@ -3543,34 +3761,95 @@ async function saveWoLine(){
       if(declared) affFail('Row '+p.row+': '+rmaDeniedMsg(p.old,declared));
     }
   }
-  const rec={wo:modalCtx.wo,pn,name:typedName||part.name,qty,status,sn,storage,note:$('f_note').value.trim()};
+  const fromStockVal = $('f_from_stock') ? parseInt($('f_from_stock').value, 10) : 0;
+  let from_stock = isNaN(fromStockVal) ? 0 : Math.max(0, fromStockVal);
+  if(part.type === 'serialised'){
+    const inStockSerials = new Set(woLineSerials.filter(isUsableInStockSerial).map(s => s.sn.toLowerCase()));
+    const enteredSns = snValues('f_snSet');
+    from_stock = enteredSns.filter(s => inStockSerials.has(s.toLowerCase())).length;
+  }
+  if(from_stock > qty) from_stock = qty;
+
+  /* validate stock availability if using from stock */
+  if(part.type !== 'serialised' && from_stock > 0){
+    const s = await getOne('stock', [pn, storage]);
+    const avail = s ? s.qty : 0;
+    const oldRec = modalCtx.id ? await getOne('woLines', modalCtx.id) : null;
+    const oldFs = (oldRec && oldRec.from_stock) || 0;
+    const needed = from_stock - oldFs;
+    if(needed > avail){
+      throw new Error('Not enough stock in '+storage+' (available: '+avail+', needed: '+needed+').');
+    }
+  }
+
+  const rec={wo:modalCtx.wo,pn,name:typedName||part.name,qty,status,sn,storage,from_stock,note:$('f_note').value.trim()};
   if(modalCtx.id){
     const old=await getOne('woLines',modalCtx.id); if(!old) throw new Error('This line no longer exists.');
     rec.wo=old.wo;
-    const detail=diffText([['Part',old.pn,pn],['Qty',old.qty,qty],['Status',old.status,rec.status],['Storage',old.storage||'',rec.storage],['Serials',old.sn||'',rec.sn],['Note',old.note||'',rec.note]]);
+    const detail=diffText([['Part',old.pn,pn],['Qty',old.qty,qty],['From stock',old.from_stock||0,from_stock],['Status',old.status,rec.status],['Storage',old.storage||'',rec.storage],['Serials',old.sn||'',rec.sn],['Note',old.note||'',rec.note]]);
     if(!detail) return NOCHANGE;
     const saved=Object.assign({},old,rec);
     await put('woLines',saved);
+
+    /* adjust stock if non-serialised */
+    if(part.type !== 'serialised'){
+      const oldFs = old.from_stock || 0;
+      const net = from_stock - oldFs;
+      if(net !== 0){
+        const s = await getOne('stock', [pn, storage]);
+        const curStock = s ? s.qty : 0;
+        await put('stock', {pn, storage, qty: curStock - net});
+        await addHistory({action:'Stock updated', pn, name:rec.name, detail:(net>0?(net+' used from '+storage):(Math.abs(net)+' returned to '+storage))+' — line on '+rec.wo, storage, order:rec.wo});
+      }
+    } else {
+      /* mark serials from stock as used */
+      const sns = splitSns(rec.sn);
+      const w = await getOne('workorders', rec.wo) || {};
+      for(const s of sns){
+        const ser = await getOne('serials', s);
+        if(ser && ser.status === 'in_stock'){
+          await put('serials', Object.assign({}, ser, {status:'used', machine:w.machine||'', usedDate:now(), order:rec.wo}));
+          await addHistory({action:'Used', pn, name:rec.name, sn:s, detail:'Serial '+s+' installed from '+ser.storage+' — work order '+rec.wo, machine:w.machine||'', storage:ser.storage, order:rec.wo});
+        }
+      }
+    }
+
     await syncWoLineIncoming(saved);
-    /* the replacement serials are often only known later, so a pending RMA raised
-       from this line is linked up now that the line has its serial numbers */
     if((rec.sn||'')!==(old.sn||'')) await linkLineRma(saved);
-    /* a line that just came in as Received puts its parts into storage */
-    if(old.status!=='Received'&&rec.status==='Received'){
+    if(old.status!=='Received'&&rec.status==='Received'&&from_stock<qty){
       await commitLineReceive(saved,part);
-      await addHistory({action:'Received',pn,name:rec.name,sn:rec.sn||'',detail:(rec.sn?('Serial '+rec.sn):('Qty '+qty))+' received into '+rec.storage+' — line on '+rec.wo,storage:rec.storage,order:rec.wo});
+      await addHistory({action:'Received',pn,name:rec.name,sn:rec.sn||'',detail:(rec.sn?('Serial '+rec.sn):('Qty '+(qty-from_stock)))+' received into '+rec.storage+' — line on '+rec.wo,storage:rec.storage,order:rec.wo});
     }
     await addHistory({action:'Work order line edited',pn,name:rec.name,detail,order:rec.wo});
     return 'Saved line for '+pn;
   }
   const id=await addRec('woLines',rec);
   const line=Object.assign({id},rec);
-  await syncWoLineIncoming(line);
-  if(rec.status==='Received'){
-    await commitLineReceive(line,part);
-    await addHistory({action:'Received',pn,name:rec.name,sn:rec.sn||'',detail:(rec.sn?('Serial '+rec.sn):('Qty '+qty))+' received into '+rec.storage+' — line on '+rec.wo,storage:rec.storage,order:rec.wo});
+
+  /* deduct stock if non-serialised and from_stock > 0 */
+  if(part.type !== 'serialised' && from_stock > 0){
+    const s = await getOne('stock', [pn, storage]);
+    const curStock = s ? s.qty : 0;
+    await put('stock', {pn, storage, qty: curStock - from_stock});
+    await addHistory({action:'Used', pn, name:rec.name, detail:from_stock+' used from '+storage+' — line on '+rec.wo, storage, order:rec.wo});
+  } else if(part.type === 'serialised'){
+    const sns = splitSns(rec.sn);
+    const w = await getOne('workorders', rec.wo) || {};
+    for(const s of sns){
+      const ser = await getOne('serials', s);
+      if(ser && ser.status === 'in_stock'){
+        await put('serials', Object.assign({}, ser, {status:'used', machine:w.machine||'', usedDate:now(), order:rec.wo}));
+        await addHistory({action:'Used', pn, name:rec.name, sn:s, detail:'Serial '+s+' installed from '+ser.storage+' — work order '+rec.wo, machine:w.machine||'', storage:ser.storage, order:rec.wo});
+      }
+    }
   }
-  await addHistory({action:'Work order line added',pn,name:rec.name,detail:(qty==null?'':qty+' × ')+rec.status,order:rec.wo});
+
+  await syncWoLineIncoming(line);
+  if(rec.status==='Received'&&from_stock<qty){
+    await commitLineReceive(line,part);
+    await addHistory({action:'Received',pn,name:rec.name,sn:rec.sn||'',detail:(rec.sn?('Serial '+rec.sn):('Qty '+(qty-from_stock)))+' received into '+rec.storage+' — line on '+rec.wo,storage:rec.storage,order:rec.wo});
+  }
+  await addHistory({action:'Work order line added',pn,name:rec.name,detail:(qty==null?'':qty+' × ')+rec.status+(from_stock>0?' ('+from_stock+' from stock)':''),order:rec.wo});
   let rmaMsg='';
   /* one RMA per row: the faulty serial out of the machine linked to the new one */
   for(const p of affected) await createWoLineRma(line,part,p.old,p.nw||'');
@@ -3646,10 +3925,12 @@ async function commitLineReceive(line,part){
 async function syncWoLineIncoming(line){
   const all=await getAll('incoming');
   const entry=all.find(i=>i.line_id===line.id)||null;
-  if(line.status!=='Waiting part'){
+  const fromStock = parseInt(line.from_stock, 10) || 0;
+  const orderedQty = Math.max(0, (line.qty || 1) - fromStock);
+  if(line.status!=='Waiting part' || orderedQty <= 0){
     if(entry&&entry.status==='Waiting'){
       await del('incoming',entry.id);
-      await addHistory({action:'Part order entry removed',pn:line.pn,name:line.name||'',detail:'Line marked as '+line.status+' — dropped from Incoming',order:line.wo});
+      await addHistory({action:'Part order entry removed',pn:line.pn,name:line.name||'',detail:'Line marked as '+(orderedQty<=0?'From stock':line.status)+' — dropped from Incoming',order:line.wo});
     }
     return;
   }
@@ -3660,15 +3941,17 @@ async function syncWoLineIncoming(line){
   const part=await getOne('parts',line.pn);
   const sns=splitSns(line.sn);
   const onTheirWay=[];
-  for(const sn of sns){ if(!(await getOne('serials',sn))) onTheirWay.push(sn); }
-  const qty=line.qty||sns.length||1;
+  for(const sn of sns){
+    const sRec = await getOne('serials',sn);
+    if(!sRec || sRec.status !== 'used') onTheirWay.push(sn);
+  }
   const serialised=!!part&&part.type==='serialised';
   const rec={
     pn:line.pn,
     storage:line.storage||'',
     order:po,
     status:'Waiting',
-    qty:serialised?(onTheirWay.length||qty):qty,
+    qty:serialised?(onTheirWay.length||orderedQty):orderedQty,
     sn:onTheirWay.length?onTheirWay.join(', '):null,
     wo:line.wo,
     line_id:line.id,
@@ -3681,7 +3964,7 @@ async function syncWoLineIncoming(line){
   }
   rec.date=now();
   await addRec('incoming',rec);
-  await addHistory({action:'Part order created',pn:line.pn,name:line.name||'',detail:'Logged in Incoming automatically · '+qty+' × '+line.pn+' · part order '+po,storage:rec.storage,order:po});
+  await addHistory({action:'Part order created',pn:line.pn,name:line.name||'',detail:'Logged in Incoming automatically · '+rec.qty+' × '+line.pn+' · part order '+po,storage:rec.storage,order:po});
 }
 async function deleteWo(wo){
   const [w,lines,inc]=await Promise.all([getOne('workorders',wo),getAll('woLines'),getAll('incoming')]);
@@ -3693,6 +3976,24 @@ async function deleteWo(wo){
   if(mine.length) bits.push(plural(mine.length,'line')+' on it will also be deleted.');
   if(mineInc.length) bits.push(plural(mineInc.length,'part order entry')+' in Incoming will also be removed.');
   if(!await confirmDialog({title:'Delete work order '+wo+'?',message:(bits.length?bits.join(' ')+'\n':'')+'Stock, serials and history are not changed.',confirmLabel:'Delete work order',danger:true})) return;
+  for(const l of mine){
+    const fs = parseInt(l.from_stock, 10) || 0;
+    if(fs > 0 && l.storage){
+      const part = await getOne('parts', l.pn);
+      if(part && part.type === 'serialised'){
+        const sns = splitSns(l.sn);
+        for(const sn of sns){
+          const ser = await getOne('serials', sn);
+          if(ser && ser.status === 'used' && ser.machine){
+            await put('serials', Object.assign({}, ser, {status:'in_stock', machine:'', usedDate:null, order:''}));
+          }
+        }
+      } else {
+        const s = await getOne('stock', [l.pn, l.storage]);
+        await put('stock', {pn:l.pn, storage:l.storage, qty:(s?s.qty:0)+fs});
+      }
+    }
+  }
   await batch(['workorders','woLines','incoming'],s=>{
     s.workorders.delete(wo);
     mine.forEach(l=>s.woLines.delete(l.id));
@@ -3706,7 +4007,27 @@ async function deleteWoLine(id){
   const l=await getOne('woLines',id); if(!l) return;
   const inc=(await getAll('incoming')).filter(i=>i.status==='Waiting'&&i.line_id===id);
   const extra=inc.length?'\nThe part order entry it created in Incoming will be removed too.':'';
-  if(!await confirmDialog({title:'Delete this line?',message:l.pn+' will be removed from '+l.wo+'.'+extra,confirmLabel:'Delete line',danger:true})) return;
+  const fs = parseInt(l.from_stock, 10) || 0;
+  const stockMsg = fs > 0 ? '\n'+fs+' unit(s) used from stock will be returned to '+l.storage+'.' : '';
+  if(!await confirmDialog({title:'Delete this line?',message:l.pn+' will be removed from '+l.wo+'.'+extra+stockMsg,confirmLabel:'Delete line',danger:true})) return;
+
+  if(fs > 0 && l.storage){
+    const part = await getOne('parts', l.pn);
+    if(part && part.type === 'serialised'){
+      const sns = splitSns(l.sn);
+      for(const sn of sns){
+        const ser = await getOne('serials', sn);
+        if(ser && ser.status === 'used' && ser.machine){
+          await put('serials', Object.assign({}, ser, {status:'in_stock', machine:'', usedDate:null, order:''}));
+        }
+      }
+    } else {
+      const s = await getOne('stock', [l.pn, l.storage]);
+      await put('stock', {pn:l.pn, storage:l.storage, qty:(s?s.qty:0)+fs});
+    }
+    await addHistory({action:'Stock restored', pn:l.pn, name:l.name||'', detail:fs+' returned to '+l.storage+' after line deleted from '+l.wo, storage:l.storage, order:l.wo});
+  }
+
   await batch(['woLines','incoming'],s=>{ s.woLines.delete(id); inc.forEach(i=>s.incoming.delete(i.id)); });
   await addHistory({action:'Work order line deleted',pn:l.pn,name:l.name||'',detail:'Removed from '+l.wo,order:l.wo});
   await renderAll(); toast('Deleted line'); await refreshWoDetail(l.wo);
@@ -3830,6 +4151,171 @@ function chooseImportMode(fileName,lines,warnings){
 }
 ---------- end check data / merge import ---------- */
 
+
+/* ======================================================================
+   Low Stock Threshold Notifications & Jump-to-Stock Highlight
+   ====================================================================== */
+let lowStockModalAutoShown = false;
+let hlBlueTimer = null;
+
+async function checkLowStockNotification(){
+  const [parts, stock, serials, storages] = await Promise.all([
+    getAll('parts'),
+    getAll('stock'),
+    getAll('serials'),
+    getAll('storages')
+  ]);
+
+  const lowItems = [];
+  parts.forEach(p => {
+    const min = p.min != null ? parseInt(p.min, 10) : 0;
+    if(isNaN(min) || min <= 0) return;
+    const total = partStockTotal(p.pn, p, stock, serials);
+    if(total > min) return; // not low
+
+    if(p.type === 'serialised'){
+      const inStock = serials.filter(s => s.pn === p.pn && s.status === 'in_stock' && !s.doa && !s.rma);
+      const stMap = {};
+      inStock.forEach(s => {
+        const st = s.storage || (storages[0] ? storages[0].name : 'Default');
+        stMap[st] = (stMap[st] || 0) + 1;
+      });
+      if(!Object.keys(stMap).length){
+        const prev = serials.find(s => s.pn === p.pn && s.storage);
+        const def = prev ? prev.storage : (storages[0] ? storages[0].name : 'Main');
+        stMap[def] = 0;
+      }
+      for(const [storage, qtyLeft] of Object.entries(stMap)){
+        lowItems.push({
+          pn: p.pn,
+          name: p.name,
+          type: p.type,
+          storage,
+          left: qtyLeft,
+          total,
+          min
+        });
+      }
+    } else {
+      const pStock = stock.filter(s => s.pn === p.pn);
+      if(!pStock.length){
+        const def = storages[0] ? storages[0].name : 'Main';
+        lowItems.push({
+          pn: p.pn,
+          name: p.name,
+          type: p.type,
+          storage: def,
+          left: 0,
+          total,
+          min
+        });
+      } else {
+        pStock.forEach(s => {
+          lowItems.push({
+            pn: p.pn,
+            name: p.name,
+            type: p.type,
+            storage: s.storage,
+            left: s.qty,
+            total,
+            min
+          });
+        });
+      }
+    }
+  });
+
+  const banner = $('lowStockBanner');
+  const badge = $('lowStockNavBadge');
+  const title = $('lowStockBannerText');
+  const sub = $('lowStockBannerSub');
+
+  if(lowItems.length > 0){
+    if(banner){
+      banner.style.display = 'flex';
+      if(title) title.textContent = plural(lowItems.length, 'part') + ' reached minimum threshold';
+      if(sub) sub.textContent = 'Stock has fallen to or below the required minimum level across your storages.';
+    }
+    if(badge){
+      badge.style.display = 'inline-block';
+      badge.textContent = lowItems.length;
+    }
+    renderLowStockModalBody(lowItems);
+  } else {
+    if(banner) banner.style.display = 'none';
+    if(badge) badge.style.display = 'none';
+    closeLowStockModal();
+  }
+}
+
+function renderLowStockModalBody(items){
+  const tbody = $('lowStockModalBody');
+  const cnt = $('lowStockModalCount');
+  if(cnt) cnt.textContent = items.length;
+  if(!tbody) return;
+  if(!items.length){
+    tbody.innerHTML = '<tr><td colspan="6" class="hint" style="text-align:center;padding:24px">All parts currently meet their minimum stock thresholds.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = items.map(item => {
+    return '<tr class="clickrow" data-act="goStockHighlight" data-storage="' + esc(item.storage) + '" data-pn="' + esc(item.pn) + '" onclick="goToStockAndHighlight(\'' + esc(item.storage) + '\',\'' + esc(item.pn) + '\')">'
+      + '<td class="nowrap"><span class="id-cell mono">' + esc(item.pn) + copyBtn(item.pn) + '</span></td>'
+      + '<td><b>' + esc(item.name) + '</b></td>'
+      + '<td class="nowrap"><span class="tag tag-installed">' + esc(item.storage) + '</span></td>'
+      + '<td class="nowrap"><span class="tag tag-low mono" style="font-weight:700">' + item.left + ' left</span></td>'
+      + '<td class="mono strong nowrap" style="color:var(--muted)">' + item.min + '</td>'
+      + '<td class="actions-cell nowrap"><button type="button" class="btn btn-ghost btn-sm" style="color:var(--info);font-weight:600" data-act="goStockHighlight" data-storage="' + esc(item.storage) + '" data-pn="' + esc(item.pn) + '" onclick="event.stopPropagation();goToStockAndHighlight(\'' + esc(item.storage) + '\',\'' + esc(item.pn) + '\')">View in stock &rarr;</button></td>'
+      + '</tr>';
+  }).join('');
+}
+
+async function showLowStockModal(){
+  await checkLowStockNotification();
+  const overlay = $('lowStockModalOverlay');
+  if(overlay) overlay.classList.add('open');
+}
+
+function closeLowStockModal(){
+  const overlay = $('lowStockModalOverlay');
+  if(overlay) overlay.classList.remove('open');
+}
+
+async function goToStockAndHighlight(storageName, pn){
+  closeLowStockModal();
+  const part = await getOne('parts', pn);
+  const mode = (part && part.type === 'serialised') ? 'serial' : 'other';
+
+  if(activeView() !== 'storage'){
+    switchView('storage', {keep: true});
+  }
+  await openStorageDetail(storageName, {pn, mode});
+
+  const highlight = () => {
+    const row = Array.from(document.querySelectorAll('tr[data-pn]')).find(r => r.dataset.pn === pn);
+    if(row){
+      row.scrollIntoView({behavior: 'smooth', block: 'center'});
+      row.classList.remove('hl-blue');
+      void row.offsetWidth; // force reflow
+      row.classList.add('hl-blue');
+      clearTimeout(hlBlueTimer);
+      hlBlueTimer = setTimeout(()=>{
+        row.classList.remove('hl-blue');
+      }, 2500);
+      return true;
+    }
+    return false;
+  };
+
+  if(!highlight()){
+    setTimeout(highlight, 100);
+    setTimeout(highlight, 300);
+  }
+}
+
+window.showLowStockModal = showLowStockModal;
+window.closeLowStockModal = closeLowStockModal;
+window.goToStockAndHighlight = goToStockAndHighlight;
+
 /* ---------- boot ---------- */
 (async()=>{
   try{
@@ -3850,6 +4336,7 @@ function chooseImportMode(fileName,lines,warnings){
     /* repairs that only need to happen once per device, kept off the start-up path */
     setTimeout(()=>{ runOneTimeRepairs().catch(()=>{}); },0);
     if(initialView!==activeView()) switchView(initialView,{fromHistory:true});
+    setTimeout(()=>{ checkLowStockNotification(); }, 250);
   }catch(err){
     toast('Could not load data from Supabase: '+((err&&err.message)||err),'error');
     showReloadBtn();
