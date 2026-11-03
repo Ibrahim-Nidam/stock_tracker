@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Stocktrack</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23dc9d00'/%3E%3Cpath d='M8 11l8-4 8 4v10l-8 4-8-4z' fill='none' stroke='%2315181b' stroke-width='2' stroke-linejoin='round'/%3E%3Cpath d='M8 11l8 4 8-4M16 15v10' fill='none' stroke='%2315181b' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232563eb'/%3E%3Cpath d='M8 11l8-4 8 4v10l-8 4-8-4z' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linejoin='round'/%3E%3Cpath d='M8 11l8 4 8-4M16 15v10' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@500;600;700&display=swap" rel="stylesheet">
@@ -13,7 +13,7 @@
     --bg:#ffffff; --surface:#ffffff; --ink:#15181b; --muted:#5c6570;
     --line:#15181b; --line-soft:#e1e4e6; --hover:#f2f4f5;
     --bar-bg:#12202e; --bar-ink:#eef2f5; --bar-muted:#7d92a6;
-    --accent:#dc9d00; --accent-ink:#15181b; --danger:#b3402a; --danger-soft:rgba(179,64,42,.09);
+    --accent:#2563eb; --accent-ink:#ffffff; --danger:#b3402a; --danger-soft:rgba(179,64,42,.09);
     --good:#2f7a4f; --info:#2f6fb3; --rma:#7b5cc4; --doa:#d6336c;
     box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
   }
@@ -22,7 +22,7 @@
     --bg:#0d1116; --surface:#141a20; --ink:#eef1f3; --muted:#93a0ab;
     --line:#eef1f3; --line-soft:#232b32; --hover:#1b2229;
     --bar-bg:#070c11; --bar-ink:#eef1f3; --bar-muted:#63737f;
-    --accent:#e3ab19; --danger:#e2604a; --danger-soft:rgba(226,96,74,.12); --good:#4caf7d; --info:#5b9be0; --rma:#a78bea; --doa:#f06595;
+    --accent:#3b82f6; --accent-ink:#15181b; --danger:#e2604a; --danger-soft:rgba(226,96,74,.12); --good:#4caf7d; --info:#5b9be0; --rma:#a78bea; --doa:#f06595;
   }
   html,body{height:100%;margin:0}
   html{scroll-padding-top:env(safe-area-inset-top,0px)}
@@ -3175,8 +3175,9 @@ async function refreshWoDetail(wo){
    with a library: the free spreadsheet build silently throws away cell colours
    and borders, and this sheet needs both. One coloured header row for the
    whole sheet, then every work order outlined as its own little table with two
-   blank rows in between. One row per part line; the work order details (date &
-   time, number, machine, status, part order) sit on the first row of a block. */
+   blank rows in between. One row per part line; the work order details (opened
+   date & time, number, machine, status, part order, closed date & time) sit on
+   the first row of a block. */
 /* a Date as an Excel serial number, so Excel shows and sorts it as a real date */
 function excelDate(d){
   if(!d||isNaN(d.getTime())) return null;
@@ -3197,14 +3198,15 @@ function excelDT(v){
 /* the styles used by the sheet — the numbers are the cell style ids below */
 const XLS_HEAD=1, XLS_BOX=2, XLS_DATE=3, XLS_ID=4, XLS_WRAP=5;
 /* the app's own colours: the header is painted in the action (accent) colour */
-const XLS_ACCENT='DC9D00', XLS_INK='15181B', XLS_RULE='15181B';
+const XLS_ACCENT='2563EB', XLS_INK='15181B', XLS_RULE='15181B', XLS_ON='FFFFFF';
 function xlsxStyles(){
   return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
   +'<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
   +'<numFmts count="1"><numFmt numFmtId="164" formatCode="dd/mm/yyyy\\ hh:mm"/></numFmts>'
-  +'<fonts count="2">'
+  +'<fonts count="3">'
   +'<font><sz val="11"/><color rgb="FF'+XLS_INK+'"/><name val="Calibri"/><family val="2"/></font>'
   +'<font><b/><sz val="11"/><color rgb="FF'+XLS_INK+'"/><name val="Calibri"/><family val="2"/></font>'
+  +'<font><b/><sz val="11"/><color rgb="FF'+XLS_ON+'"/><name val="Calibri"/><family val="2"/></font>'
   +'</fonts>'
   +'<fills count="3">'
   +'<fill><patternFill patternType="none"/></fill>'
@@ -3221,7 +3223,7 @@ function xlsxStyles(){
      · 5 boxed, wrapped (the serial number columns carry one unit per line) */
   +'<cellXfs count="6">'
   +'<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'
-  +'<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment vertical="center"/></xf>'
+  +'<xf numFmtId="0" fontId="2" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment vertical="center"/></xf>'
   +'<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/>'
   +'<xf numFmtId="164" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1"/>'
   +'<xf numFmtId="0" fontId="1" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1"/>'
@@ -3313,25 +3315,23 @@ function woSnCells(line,rmas){
 }
 async function generateWoXlsx(){
   if(!woSelected.size){ toast('Select the work orders you want first.','info'); return; }
-  const [wos,lines,hist,rmas]=await Promise.all([getAll('workorders'),getAll('woLines'),getAll('history'),getAll('rma')]);
+  const [wos,lines,rmas]=await Promise.all([getAll('workorders'),getAll('woLines'),getAll('rma')]);
   /* the chosen work orders, in the order they are shown in the list */
   const sel=wos.filter(w=>woSelected.has(w.wo)).sort((a,b)=>(b.opened||'').localeCompare(a.opened||'')||b.wo.localeCompare(a.wo));
-  /* every moment a line was received, keyed by work order + part number, oldest first */
-  const recv={};
-  hist.filter(h=>h.pn&&h.order&&histTs(h)&&((h.action==='Received')||(h.action==='Work order line updated'&&/marked as Received/i.test(h.detail||''))))
-    .sort((a,b)=>histTs(a)-histTs(b))
-    .forEach(h=>{ const k=h.order+'|'+h.pn; (recv[k]=recv[k]||[]).push(histTs(h)); });
   /* one entry per sheet row: either a list of cells, or null for a blank row.
      A cell is a value plus a style id — empty cells keep their style so the
      outline around a work order stays unbroken. */
-  const rows=[['Date & time','Work order','Machine','WO status','Part order','Part number','Designation','Qty','New S/N','Defect S/N','Line status','Received (date & time)'].map(v=>({v,s:XLS_HEAD}))];
+  const rows=[['Opened (date & time)','Work order','Machine','WO status','Part order','Part number','Designation','Qty','New S/N','Defect S/N','Line status','Closed (date & time)'].map(v=>({v,s:XLS_HEAD}))];
   sel.forEach((w,wi)=>{
     const ls=lines.filter(l=>l.wo===w.wo).sort((a,b)=>lineSortKey(a)-lineSortKey(b)||a.id-b.id);
     /* which RMAs belong to which line of this work order */
     const byLine=rmasByLine(w.wo,ls,rmas);
     (ls.length?ls:[null]).forEach((l,i)=>{
       const first=i===0;
+      /* the block's own moments: when the work order was opened, and when it
+         was closed — both are work order facts, so they sit on the first row */
       const opened=first?excelDT(w.opened):null;
+      const closed=first?excelDT(w.closed):null;
       /* serialised lines show their new serials next to the faulty ones they replace */
       const sn=woSnCells(l,l?byLine[l.id]:[]);
       const cells=[
@@ -3345,15 +3345,9 @@ async function generateWoXlsx(){
         {v:l&&l.qty!=null?l.qty:'',s:XLS_BOX},
         sn.nw,
         sn.def,
-        {v:l?(l.from_stock&&l.from_stock>0&&l.from_stock<l.qty?(l.status+' ('+l.from_stock+' from stock)'):(l.status||'')):'',s:XLS_BOX}
+        {v:l?(l.from_stock&&l.from_stock>0&&l.from_stock<l.qty?(l.status+' ('+l.from_stock+' from stock)'):(l.status||'')):'',s:XLS_BOX},
+        {v:first?(closed==null?(fmtDT(w.closed)||''):closed):'',s:first&&closed!=null?XLS_DATE:XLS_BOX}
       ];
-      let received={v:'',s:XLS_BOX};
-      if(l&&l.status==='Received'){
-        const q=recv[w.wo+'|'+l.pn], ts=q&&q.length?q.shift():0;
-        const n=ts?excelDate(new Date(ts)):null;
-        if(n!=null) received={v:n,s:XLS_DATE};
-      }
-      cells.push(received);
       rows.push(cells);
     });
     /* two blank rows keep each work order visually on its own */
@@ -3373,7 +3367,7 @@ async function generateWoXlsx(){
     });
     sheetData+='</row>';
   });
-  const widths=[17,15,20,15,14,16,32,6,18,18,14,19];
+  const widths=[21,15,20,15,14,16,32,6,18,18,14,21];
   const cols=widths.map((w,i)=>'<col min="'+(i+1)+'" max="'+(i+1)+'" width="'+w+'" customWidth="1"/>').join('');
   const sheet='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
     +'<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
